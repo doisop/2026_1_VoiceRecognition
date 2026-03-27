@@ -82,18 +82,22 @@ let activeDevice: Device = 'wasm'
 
 /** Pre-loads Whisper model. Safe to call multiple times — only loads once. */
 export async function loadWhisper(onProgress?: ProgressCallback): Promise<void> {
-  if (asrInstance) return
+  if (asrInstance) {
+    console.log(`[STT] 이미 초기화됨 — 현재 백엔드: ${activeDevice === 'webgpu' ? 'WebGPU (GPU)' : 'WASM (CPU)'}`)
+    return
+  }
   if (loadPromise) return loadPromise
 
   loadPromise = (async () => {
     const { pipeline } = await getTransformers()
     if (!pipeline) throw new Error('Failed to load transformers.js from CDN')
 
-    activeDevice = await detectDevice()
+    const preferredDevice = await detectDevice()
+    activeDevice = preferredDevice
     const platformLabel = getPlatformLabel()
-    const deviceLabel = activeDevice === 'webgpu' ? 'WebGPU (GPU)' : 'WASM (CPU)'
+    const startDeviceLabel = activeDevice === 'webgpu' ? 'WebGPU (GPU)' : 'WASM (CPU)'
 
-    console.log(`[STT] Whisper 모델 로딩 시작 — 플랫폼: ${platformLabel} / 디바이스: ${deviceLabel}`)
+    console.log(`[STT] Whisper 모델 로딩 시작 — 플랫폼: ${platformLabel} / 디바이스: ${startDeviceLabel}`)
 
     const fileProgress: Record<string, number> = {}
 
@@ -107,13 +111,33 @@ export async function loadWhisper(onProgress?: ProgressCallback): Promise<void> 
         }
       : undefined
 
-    asrInstance = await pipeline(
-      'automatic-speech-recognition',
-      'Xenova/whisper-small',
-      { quantized: true, device: activeDevice, progress_callback: progressCallback }
-    )
+    try {
+      asrInstance = await pipeline(
+        'automatic-speech-recognition',
+        'Xenova/whisper-small',
+        { quantized: true, device: activeDevice, progress_callback: progressCallback }
+      )
+    } catch (error) {
+      if (preferredDevice === 'webgpu') {
+        console.warn('[STT] WebGPU 초기화 실패, WASM(CPU)로 폴백합니다.', error)
+        activeDevice = 'wasm'
+        asrInstance = await pipeline(
+          'automatic-speech-recognition',
+          'Xenova/whisper-small',
+          { quantized: true, device: activeDevice, progress_callback: progressCallback }
+        )
+      } else {
+        throw error
+      }
+    }
 
-    console.log(`[STT] Whisper 모델 로딩 완료 — ${deviceLabel}`)
+    const finalDeviceLabel = activeDevice === 'webgpu' ? 'WebGPU (GPU)' : 'WASM (CPU)'
+    console.log(`[STT] Whisper 모델 로딩 완료 — ${finalDeviceLabel}`)
+    if (activeDevice === 'webgpu') {
+      console.log('[STT] Using WebGPU backend.')
+    } else {
+      console.log('[STT] Using fallback backend.')
+    }
   })()
 
   return loadPromise
