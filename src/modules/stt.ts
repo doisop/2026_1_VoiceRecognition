@@ -81,7 +81,10 @@ export async function transcribeBlob(blob: Blob): Promise<string> {
   const samples = await blobTo16kFloat32(blob)
   const result = await asrInstance(samples, { language: 'korean', task: 'transcribe' })
   const output = Array.isArray(result) ? result[0] : result
-  return (output?.text ?? '').trim()
+  const text = (output?.text ?? '').trim()
+  
+        console.log('아줴줴이야 —', new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3 }))
+  return text
 }
 
 // ─── Audio helpers ────────────────────────────────────────────────────────────
