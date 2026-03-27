@@ -5,6 +5,10 @@
  * Vite's module transformation breaks this bundle's initialization sequence,
  * so we bypass Vite entirely by loading the library from CDN at runtime.
  * The ~250 MB Whisper model weights are still cached in the browser's IndexedDB.
+ *
+ * Device selection:
+ *   - Windows / Apple Silicon → WebGPU (DirectX 12 / Metal 내부 사용)
+ *   - WebGPU 미지원 환경      → WASM CPU 폴백
  */
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -32,12 +36,49 @@ async function getTransformers(): Promise<{ pipeline: typeof _pipeline; env: typ
   return { pipeline: _pipeline, env: _env }
 }
 
+// ─── Platform & Device detection ─────────────────────────────────────────────
+
+type Device = 'webgpu' | 'wasm'
+
+/** 현재 플랫폼을 사람이 읽기 좋은 문자열로 반환 */
+function getPlatformLabel(): string {
+  const ua = navigator.userAgent
+  const platform = (navigator.platform ?? '').toLowerCase()
+
+  if (platform.includes('mac') || ua.includes('Mac OS X')) {
+    // 브라우저는 Apple Silicon/Intel 구분을 노출하지 않으므로 macOS로 표기
+    return 'macOS (WebGPU → Metal)'
+  }
+  if (platform.includes('win') || ua.includes('Windows')) {
+    return 'Windows (WebGPU → DirectX 12)'
+  }
+  if (platform.includes('linux') || ua.includes('Linux')) {
+    return 'Linux (WebGPU → Vulkan)'
+  }
+  return '알 수 없는 플랫폼'
+}
+
+/**
+ * WebGPU 어댑터 요청으로 실제 지원 여부를 확인한다.
+ * navigator.gpu 존재 여부만으로는 불충분하므로 requestAdapter까지 시도.
+ */
+async function detectDevice(): Promise<Device> {
+  if (typeof navigator === 'undefined' || !('gpu' in navigator)) return 'wasm'
+  try {
+    const adapter = await (navigator as Navigator & { gpu: { requestAdapter: () => Promise<unknown> } }).gpu.requestAdapter()
+    return adapter ? 'webgpu' : 'wasm'
+  } catch {
+    return 'wasm'
+  }
+}
+
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 export type ProgressCallback = (pct: number) => void
 
 let asrInstance: Pipeline | null = null
 let loadPromise: Promise<void> | null = null
+let activeDevice: Device = 'wasm'
 
 /** Pre-loads Whisper model. Safe to call multiple times — only loads once. */
 export async function loadWhisper(onProgress?: ProgressCallback): Promise<void> {
@@ -47,6 +88,12 @@ export async function loadWhisper(onProgress?: ProgressCallback): Promise<void> 
   loadPromise = (async () => {
     const { pipeline } = await getTransformers()
     if (!pipeline) throw new Error('Failed to load transformers.js from CDN')
+
+    activeDevice = await detectDevice()
+    const platformLabel = getPlatformLabel()
+    const deviceLabel = activeDevice === 'webgpu' ? 'WebGPU (GPU)' : 'WASM (CPU)'
+
+    console.log(`[STT] Whisper 모델 로딩 시작 — 플랫폼: ${platformLabel} / 디바이스: ${deviceLabel}`)
 
     const fileProgress: Record<string, number> = {}
 
@@ -63,8 +110,10 @@ export async function loadWhisper(onProgress?: ProgressCallback): Promise<void> 
     asrInstance = await pipeline(
       'automatic-speech-recognition',
       'Xenova/whisper-small',
-      { quantized: true, progress_callback: progressCallback }
+      { quantized: true, device: activeDevice, progress_callback: progressCallback }
     )
+
+    console.log(`[STT] Whisper 모델 로딩 완료 — ${deviceLabel}`)
   })()
 
   return loadPromise
@@ -78,12 +127,17 @@ export function isWhisperLoaded(): boolean {
 export async function transcribeBlob(blob: Blob): Promise<string> {
   if (!asrInstance) throw new Error('Whisper model not loaded. Call loadWhisper() first.')
 
+  const deviceLabel = activeDevice === 'webgpu' ? 'WebGPU (GPU)' : 'WASM (CPU)'
+  console.log(`[STT] 전사 시작 — 사용 디바이스: ${deviceLabel}`)
+
   const samples = await blobTo16kFloat32(blob)
+  const t0 = performance.now()
   const result = await asrInstance(samples, { language: 'korean', task: 'transcribe' })
+  const inferenceMs = (performance.now() - t0).toFixed(0)
+
   const output = Array.isArray(result) ? result[0] : result
   const text = (output?.text ?? '').trim()
-  
-        console.log('아줴줴이야 —', new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3 }))
+  console.log(`[STT] 전사 완료 (${inferenceMs}ms / ${deviceLabel}):`, text)
   return text
 }
 

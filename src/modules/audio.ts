@@ -31,7 +31,7 @@ export class AudioRecorder {
         const blob = new Blob(this.chunks, { type: 'audio/webm' })
         // Stop all tracks to release the microphone
         this.mediaRecorder?.stream.getTracks().forEach((t) => t.stop())
-        console.log('[Audio] 마이크 입력 종료 —', new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3 }))
+        console.log('[Audio] 마이크 입력 종료 —', new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }))
         resolve(blob)
       }
 
