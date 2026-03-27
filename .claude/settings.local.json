@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(npm create:*)",
-      "Bash(npx --yes create-vite@5 . --template react-ts)"
+      "Bash(npx --yes create-vite@5 . --template react-ts)",
+      "Bash(npm install:*)",
+      "Bash(npx tsc:*)"
     ]
   }
 }

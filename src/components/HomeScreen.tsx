@@ -1,103 +1,125 @@
+import { MapPin, ChevronRight, Mic } from 'lucide-react'
 import type { Scenario } from '../types'
 import { scenarios } from '../data/scenarios'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 
 interface Props {
   onSelect: (sc: Scenario) => void
 }
 
-const difficultyLabel: Record<string, { ko: string; ru: string; color: string }> = {
-  '초급': { ko: '초급', ru: 'Начальный', color: 'bg-emerald-500/90' },
-  '중급': { ko: '중급', ru: 'Средний',   color: 'bg-amber-500/90'   },
-  '고급': { ko: '고급', ru: 'Высший',    color: 'bg-rose-500/90'    },
+const difficultyVariant: Record<string, 'emerald' | 'amber' | 'rose'> = {
+  '초급': 'emerald',
+  '중급': 'amber',
+  '고급': 'rose',
+}
+
+const difficultyRu: Record<string, string> = {
+  '초급': 'Начальный',
+  '중급': 'Средний',
+  '고급': 'Высший',
 }
 
 export default function HomeScreen({ onSelect }: Props) {
   return (
-    <div className="min-h-screen bg-slate-950 text-white">
+    <div className="min-h-screen bg-background">
 
-      {/* ── Header ─────────────────────────────────────────── */}
-      <div className="px-5 pt-12 pb-6">
-        <p className="text-xs font-semibold tracking-widest text-indigo-400 uppercase mb-2">
-          알이랑 우리랑
-        </p>
-        <h1 className="text-3xl font-extrabold leading-tight text-white">
-          한국어 발음 연습
-        </h1>
-        <p className="text-slate-400 text-sm mt-1">
-          Тренировка произношения корейского языка
-        </p>
-        <p className="text-slate-500 text-xs mt-3 leading-relaxed">
-          실생활 상황을 직접 연습하며 자연스러운 한국어를 익혀보세요.
-        </p>
+      {/* ── Hero header ──────────────────────────────────────── */}
+      <div className="relative overflow-hidden border-b border-border">
+        <div className="absolute inset-0 bg-gradient-to-br from-indigo-950 via-background to-background" />
+        <div className="relative px-6 pt-12 pb-10 max-w-5xl mx-auto">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
+              <Mic className="w-4 h-4 text-white" />
+            </div>
+            <span className="text-xs font-bold tracking-widest text-primary uppercase">
+              알이랑 우리랑
+            </span>
+          </div>
+          <h1 className="text-4xl font-extrabold text-foreground leading-tight">
+            한국어 발음 연습
+          </h1>
+          <p className="text-muted-foreground mt-1 text-base">
+            Тренировка произношения корейского языка
+          </p>
+          <p className="text-muted-foreground/70 text-sm mt-3 max-w-lg leading-relaxed">
+            실생활 속 핵심 상황을 롤플레잉으로 연습하고,
+            발음과 음조에 대한 시각적 피드백을 받아보세요.
+          </p>
+        </div>
       </div>
 
-      {/* ── Section label ──────────────────────────────────── */}
-      <div className="px-5 mb-3">
-        <p className="text-xs font-semibold text-slate-500 uppercase tracking-widest">
-          상황 선택 · Выбор ситуации
-        </p>
-      </div>
+      {/* ── Scenario grid ────────────────────────────────────── */}
+      <div className="max-w-5xl mx-auto px-6 py-8">
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-widest">
+            상황 선택 · Выбор ситуации
+          </h2>
+          <span className="text-xs text-muted-foreground">{scenarios.length}개 시나리오</span>
+        </div>
 
-      {/* ── Scenario cards ─────────────────────────────────── */}
-      <div className="px-5 pb-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {scenarios.map((sc) => (
-          <ScenarioCard key={sc.id} scenario={sc} onSelect={onSelect} />
-        ))}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {scenarios.map((sc) => (
+            <ScenarioCard key={sc.id} scenario={sc} onSelect={onSelect} />
+          ))}
+        </div>
       </div>
     </div>
   )
 }
 
-function ScenarioCard({ scenario: sc, onSelect }: { scenario: Scenario; onSelect: (sc: Scenario) => void }) {
-  const diff = difficultyLabel[sc.difficulty]
-
+function ScenarioCard({
+  scenario: sc,
+  onSelect,
+}: {
+  scenario: Scenario
+  onSelect: (sc: Scenario) => void
+}) {
   return (
     <button
       onClick={() => onSelect(sc)}
-      className="group w-full text-left rounded-3xl overflow-hidden relative focus:outline-none"
-      style={{ height: 200 }}
+      className="group text-left rounded-2xl overflow-hidden border border-border bg-card hover:border-primary/50 transition-all duration-300 hover:shadow-lg hover:shadow-primary/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
-      {/* Background image */}
-      <div
-        className="absolute inset-0 bg-cover bg-center transition-transform duration-500 group-hover:scale-105"
-        style={{ backgroundImage: `url('${sc.image}')` }}
-      />
+      {/* Image area */}
+      <div className="relative h-44 overflow-hidden">
+        <div
+          className="absolute inset-0 bg-cover bg-center transition-transform duration-500 group-hover:scale-105"
+          style={{ backgroundImage: `url('${sc.image}')` }}
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
 
-      {/* Gradient overlay */}
-      <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-black/10" />
-
-      {/* Difficulty badge */}
-      <div className="absolute top-4 right-4">
-        <span className={`text-xs font-bold text-white px-2.5 py-1 rounded-full backdrop-blur-sm ${diff.color}`}>
-          {diff.ko} · {diff.ru}
-        </span>
-      </div>
-
-      {/* Content */}
-      <div className="absolute bottom-0 left-0 right-0 p-5">
-        {/* Title */}
-        <div className="flex items-baseline gap-2 mb-1">
-          <h2 className="text-2xl font-extrabold text-white leading-none">{sc.title}</h2>
-          <span className="text-base font-medium text-white/70">{sc.titleSub}</span>
+        {/* Difficulty badge */}
+        <div className="absolute top-3 right-3">
+          <Badge variant={difficultyVariant[sc.difficulty]} className="backdrop-blur-sm shadow text-xs">
+            {sc.difficulty} · {difficultyRu[sc.difficulty]}
+          </Badge>
         </div>
 
-        {/* Description */}
-        <p className="text-sm text-white/80 leading-snug mb-3">{sc.description}</p>
+        {/* Title overlay */}
+        <div className="absolute bottom-3 left-4">
+          <p className="text-2xl font-extrabold text-white leading-none">{sc.title}</p>
+          <p className="text-sm text-white/70 mt-0.5">{sc.titleSub}</p>
+        </div>
+      </div>
 
-        {/* Footer row */}
+      {/* Card body */}
+      <div className="p-4">
+        <p className="text-sm text-muted-foreground leading-relaxed mb-4">
+          {sc.description}
+        </p>
+
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
-            <span className="text-xs text-white/60">{sc.character.name}</span>
-            <span className="text-white/30 text-xs">·</span>
-            <span className="text-xs text-white/60">{sc.steps.length}단계</span>
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <MapPin className="w-3 h-3" />
+            <span>{sc.character.name}</span>
+            <span className="text-border">·</span>
+            <span>{sc.steps.length}단계</span>
           </div>
 
-          {/* Arrow button */}
-          <div className="flex items-center gap-1 bg-white/20 backdrop-blur-sm group-hover:bg-indigo-500 transition-colors rounded-full px-3 py-1">
-            <span className="text-xs font-semibold text-white">시작</span>
-            <span className="text-white text-xs">→</span>
-          </div>
+          <Button variant="glass" size="sm" className="gap-1 pointer-events-none">
+            시작
+            <ChevronRight className="w-3.5 h-3.5" />
+          </Button>
         </div>
       </div>
     </button>
