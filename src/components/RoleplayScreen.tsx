@@ -158,11 +158,11 @@ export default function RoleplayScreen({ scenario, onFeedback, onBack }: Props) 
       {/* Bottom panel */}
       <div className="relative z-10 bg-black/70 backdrop-blur-xl border-t border-white/10 px-4 pt-3 pb-8">
 
-        {/* Model loading bar */}
+        {/* STT client initialization */}
         {stepState === 'loading' && (
           <div className="mb-4">
             <div className="flex justify-between text-xs text-white/60 mb-1">
-              <span>Whisper 모델 로딩 중...</span>
+              <span>STT 서버 연결 준비 중...</span>
               <span>{loadPct}%</span>
             </div>
             <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
@@ -171,7 +171,7 @@ export default function RoleplayScreen({ scenario, onFeedback, onBack }: Props) 
                 style={{ width: `${loadPct}%` }}
               />
             </div>
-            <p className="text-xs text-white/40 mt-1">첫 실행 시 모델 파일을 다운로드합니다 (~250 MB)</p>
+            <p className="text-xs text-white/40 mt-1">녹음된 음성은 Modal Whisper 서버로 전송되어 처리됩니다</p>
           </div>
         )}
 
