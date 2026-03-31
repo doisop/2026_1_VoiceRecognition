@@ -21,8 +21,11 @@ export default defineConfig(({ mode }) => {
           rewrite: () => '/tts-premium/v1/tts',
           configure: (proxy) => {
             proxy.on('proxyReq', (proxyReq) => {
-              proxyReq.setHeader('X-NCP-APIGW-API-KEY-ID', env.NAVER_CLIENT_ID ?? '')
-              proxyReq.setHeader('X-NCP-APIGW-API-KEY', env.NAVER_CLIENT_SECRET ?? '')
+              const id     = env.NAVER_CLIENT_ID ?? ''
+              const secret = env.NAVER_CLIENT_SECRET ?? ''
+              const isAscii = (s: string) => /^[\x20-\x7E]+$/.test(s)
+              if (id     && isAscii(id))     proxyReq.setHeader('X-NCP-APIGW-API-KEY-ID', id)
+              if (secret && isAscii(secret)) proxyReq.setHeader('X-NCP-APIGW-API-KEY', secret)
             })
           },
         },
