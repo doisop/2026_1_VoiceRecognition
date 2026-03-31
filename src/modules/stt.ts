@@ -1,101 +1,83 @@
 /**
- * STT module — Web Speech API SpeechRecognition
+ * STT module — remote Whisper API via Modal
  *
- * Chrome 내장 음성인식 (Google 음성 서버 사용).
- * 인터넷 연결 필요 / Chrome 전용.
- * 언어: ko-KR (한국어)
+ * 기존 브라우저 내 Whisper 추론 대신, 녹음된 오디오 Blob을 Modal 서버로 전송한다.
+ * loadWhisper/isWhisperLoaded/transcribeBlob 공개 API는 유지해서 화면 로직 변경을 최소화한다.
  */
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function getSpeechRecognitionCtor(): any {
-  if (typeof window === 'undefined') return null
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const w = window as any
-  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null
+export type ProgressCallback = (pct: number) => void
+
+type TranscriptionResponse = {
+  text?: string
+  transcript?: string
+  result?: { text?: string; transcript?: string }
 }
 
-export function isSpeechRecognitionSupported(): boolean {
-  return !!getSpeechRecognitionCtor()
-}
+const MODAL_STT_ENDPOINT =
+  ((import.meta as unknown as { env?: Record<string, string | undefined> }).env?.VITE_MODAL_STT_URL) ??
+  "https://kang-minseokk--whisper-turbo-api-whisper-server.modal.run"
 
-// ── Backward-compat stubs (이전 Whisper API와 인터페이스 유지) ────────────────
-export function isWhisperLoaded(): boolean { return true }
-export async function loadWhisper(_onProgress?: (pct: number) => void): Promise<void> {}
+const REQUEST_TIMEOUT_MS = 60_000
 
-// ── SpeechRecognizer ──────────────────────────────────────────────────────────
+let isReady = false
+let loadPromise: Promise<void> | null = null
 
-export class SpeechRecognizer {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private recognition: any = null
-  private resolveStop: ((text: string) => void) | null = null
-  private rejectStop: ((err: Error) => void) | null = null
-  private finalTranscript = ''
-
-  /** 녹음 시작. AudioRecorder.start()와 동시에 호출하세요. */
-  start(lang = 'ko-KR'): void {
-    const SR = getSpeechRecognitionCtor()
-    if (!SR) throw new Error('SpeechRecognition을 지원하지 않는 브라우저입니다. Chrome을 사용하세요.')
-
-    this.finalTranscript = ''
-    this.recognition = new SR()
-    this.recognition.lang = lang
-    this.recognition.continuous = true
-    this.recognition.interimResults = false
-    this.recognition.maxAlternatives = 1
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    this.recognition.onresult = (e: any) => {
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        if (e.results[i].isFinal) {
-          this.finalTranscript += e.results[i][0].transcript
-        }
-      }
-    }
-
-    this.recognition.onend = () => {
-      const text = this.finalTranscript.trim()
-      console.log('[STT] Web Speech API 전사 완료:', text)
-      this.resolveStop?.(text)
-      this.resolveStop = null
-      this.rejectStop = null
-    }
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    this.recognition.onerror = (e: any) => {
-      // 'no-speech'는 사용자가 말하지 않은 경우 — 빈 문자열로 처리
-      if (e.error === 'no-speech') {
-        console.warn('[STT] 음성 미감지 (no-speech)')
-        this.resolveStop?.('')
-      } else {
-        console.error('[STT] SpeechRecognition 오류:', e.error)
-        this.rejectStop?.(new Error(e.error))
-      }
-      this.resolveStop = null
-      this.rejectStop = null
-    }
-
-    this.recognition.start()
-    console.log(`[STT] Web Speech API 시작 (${lang})`)
+/** STT 서버 연결을 준비한다. 실제 모델 로딩 대신 연결 상태만 초기화한다. */
+export async function loadWhisper(onProgress?: ProgressCallback): Promise<void> {
+  if (isReady) {
+    if (onProgress) onProgress(100)
+    return
   }
+  if (loadPromise) return loadPromise
 
-  /** 녹음 종료 후 최종 transcript를 반환. */
-  stop(): Promise<string> {
-    return new Promise((resolve, reject) => {
-      this.resolveStop = resolve
-      this.rejectStop = reject
-      if (this.recognition) {
-        this.recognition.stop()
-      } else {
-        resolve('')
-      }
+  loadPromise = (async () => {
+    if (onProgress) onProgress(100)
+    isReady = true
+    console.log(`[STT] Modal STT 서버 사용: ${MODAL_STT_ENDPOINT}`)
+  })()
+
+  return loadPromise
+}
+
+export function isWhisperLoaded(): boolean {
+  return isReady
+}
+
+/** 녹음된 오디오 Blob을 Modal STT API로 전송해 전사 텍스트를 받는다. */
+export async function transcribeBlob(blob: Blob): Promise<string> {
+  if (!isReady) throw new Error('STT client not initialized. Call loadWhisper() first.')
+
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+
+  try {
+    const startedAt = performance.now()
+
+    const response = await fetch(MODAL_STT_ENDPOINT, {
+      method: 'POST',
+      body: blob,
+      signal: controller.signal,
     })
-  }
 
-  /** 결과 없이 강제 중단. */
-  abort(): void {
-    this.recognition?.abort()
-    this.recognition = null
-    this.resolveStop = null
-    this.rejectStop = null
+    if (!response.ok) {
+      const body = await response.text().catch(() => '')
+      throw new Error(`STT API request failed (${response.status}): ${body.slice(0, 300)}`)
+    }
+
+    const data = (await response.json()) as TranscriptionResponse
+    const text = (
+      data.text ??
+      data.transcript ??
+      data.result?.text ??
+      data.result?.transcript ??
+      ''
+    ).trim()
+
+    const latencyMs = Math.round(performance.now() - startedAt)
+    console.log(`[STT] Modal 전사 완료 (${latencyMs}ms):`, text)
+
+    return text
+  } finally {
+    clearTimeout(timeout)
   }
 }

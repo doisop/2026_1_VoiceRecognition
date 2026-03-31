@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import type { Scenario, FeedbackResult } from '../types'
 import { evaluateExpression } from '../modules/expressionEval'
 import { AudioRecorder } from '../modules/audio'
-import { SpeechRecognizer } from '../modules/stt'
+import { loadWhisper, transcribeBlob, isWhisperLoaded } from '../modules/stt'
 import { analyzePitch } from '../modules/pitchAnalysis'
 import { speak, stopSpeaking, initVoices } from '../modules/tts'
 import AvatarCharacter, { type AvatarState } from './AvatarCharacter'
@@ -17,7 +17,7 @@ interface Props {
 type StepState = 'speaking' | 'idle' | 'recording' | 'processing'
 
 interface DialogLine {
-  speaker: string   // character name or '나'
+  speaker: string
   text: string
   score?: number
 }
@@ -31,7 +31,6 @@ export default function RoleplayScreen({ scenario, onFeedback, onBack }: Props) 
   })
   const [avatarState, setAvatarState] = useState<AvatarState>('idle')
   const recorderRef = useRef<AudioRecorder | null>(null)
-  const recognizerRef = useRef<SpeechRecognizer | null>(null)
 
   const scoresRef = useRef<number[]>([])
   const feedbackRef = useRef<string[]>([])
@@ -47,11 +46,12 @@ export default function RoleplayScreen({ scenario, onFeedback, onBack }: Props) 
 
   useEffect(() => {
     initVoices()
-    speakStep(0)
-    return () => {
-      stopSpeaking()
-      recognizerRef.current?.abort()
+    if (!isWhisperLoaded()) {
+      loadWhisper().then(() => speakStep(0))
+    } else {
+      speakStep(0)
     }
+    return () => stopSpeaking()
   }, [])
 
   function speakStep(idx: number) {
@@ -74,29 +74,24 @@ export default function RoleplayScreen({ scenario, onFeedback, onBack }: Props) 
     setAvatarState('idle')
     setStepState('recording')
     setDialogLine({ speaker: '나', text: '말하는 중...' })
-
     recorderRef.current = new AudioRecorder()
-    recognizerRef.current = new SpeechRecognizer()
     await recorderRef.current.start()
-    recognizerRef.current.start('ko-KR')
   }
 
   async function stopRecording() {
-    if (!recorderRef.current || !recognizerRef.current) return
+    if (!recorderRef.current) return
     setStepState('processing')
     setAvatarState('thinking')
     setDialogLine({ speaker: '나', text: '분석 중...' })
 
-    // MediaRecorder(pitch용)와 SpeechRecognition(STT)을 동시에 종료
-    const [blob, transcript] = await Promise.all([
-      recorderRef.current.stop(),
-      recognizerRef.current.stop().catch(() => ''),
-    ])
+    const blob = await recorderRef.current.stop()
 
-    // pitch 분석은 마지막 스텝에서만 실행 (중간 스텝은 불필요)
-    const pitchResult = step.isLast
-      ? await analyzePitch(blob, step.referenceAudio)
-      : { contourUser: [] as number[], contourRef: null, feedback: '', divergentRegions: [] as [number, number][] }
+    const [transcript, pitchResult] = await Promise.all([
+      transcribeBlob(blob).catch(() => ''),
+      step.isLast
+        ? analyzePitch(blob, step.referenceAudio)
+        : Promise.resolve({ contourUser: [] as number[], contourRef: null, feedback: '', divergentRegions: [] as [number, number][] }),
+    ])
 
     const evalResult = evaluateExpression(transcript, step)
     scoresRef.current.push(evalResult.score)
@@ -178,7 +173,6 @@ export default function RoleplayScreen({ scenario, onFeedback, onBack }: Props) 
           <X className="w-4 h-4" />
         </button>
 
-        {/* Progress bar */}
         <div className="flex-1 mx-4 h-1 bg-white/20 rounded-full overflow-hidden">
           <div className="h-full bg-white/70 transition-all duration-500" style={{ width: `${progress}%` }} />
         </div>
@@ -188,7 +182,7 @@ export default function RoleplayScreen({ scenario, onFeedback, onBack }: Props) 
         </span>
       </div>
 
-      {/* ── Avatar — centered, lower body overlaps dialog box ── */}
+      {/* ── Avatar ── */}
       <div className="absolute left-1/2 -translate-x-1/2 bottom-[26%] z-10"
            style={{ height: '72%', aspectRatio: '3/4' }}>
         <AvatarCharacter state={avatarState} className="w-full h-full" />
@@ -196,10 +190,9 @@ export default function RoleplayScreen({ scenario, onFeedback, onBack }: Props) 
 
       {/* ── VN Dialog box ── */}
       <div className="absolute bottom-0 left-0 right-0 z-20" style={{ height: '28%' }}>
-        {/* Glass panel */}
         <div className="h-full bg-black/65 backdrop-blur-md border-t border-white/15 flex flex-col px-6 py-4 gap-2">
 
-          {/* Speaker name tag */}
+          {/* Speaker name + state dot */}
           <div className="flex items-center gap-3">
             <span className={`text-sm font-bold px-3 py-0.5 rounded ${
               dialogLine.speaker === '나'
@@ -209,7 +202,6 @@ export default function RoleplayScreen({ scenario, onFeedback, onBack }: Props) 
               {dialogLine.speaker}
             </span>
 
-            {/* Score badge (user turn result) */}
             {dialogLine.score !== undefined && (
               <span className={`text-xs font-semibold px-2 py-0.5 rounded ${
                 dialogLine.score >= 80 ? 'bg-emerald-500/80 text-white' :
@@ -220,7 +212,6 @@ export default function RoleplayScreen({ scenario, onFeedback, onBack }: Props) 
               </span>
             )}
 
-            {/* State indicator dot */}
             <div className={`w-1.5 h-1.5 rounded-full ml-auto ${
               stepState === 'recording'  ? 'bg-red-400 animate-pulse' :
               stepState === 'speaking'   ? 'bg-indigo-400 animate-pulse' :
@@ -234,10 +225,9 @@ export default function RoleplayScreen({ scenario, onFeedback, onBack }: Props) 
             {dialogLine.text}
           </p>
 
-          {/* Controls row (idle only) */}
+          {/* Controls (idle) */}
           {isUserTurn && (
             <div className="flex items-center gap-2">
-              {/* Hint chips */}
               <div className="flex gap-1.5 flex-1 flex-wrap">
                 {step.targetExpressions.slice(0, 2).map((expr) => (
                   <button
@@ -249,8 +239,6 @@ export default function RoleplayScreen({ scenario, onFeedback, onBack }: Props) 
                   </button>
                 ))}
               </div>
-
-              {/* Mic button */}
               <button
                 onClick={startRecording}
                 className="w-11 h-11 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white flex items-center justify-center shadow-lg transition-colors flex-shrink-0"
