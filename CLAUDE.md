@@ -19,55 +19,71 @@ npm run dev
 # open http://localhost:5173
 ```
 
-**Browser requirement:** Chrome only — Web Audio API (`AudioWorklet`) and Whisper ONNX inference require Chrome.
+**Browser requirement:** Chrome only — Web Speech API (`SpeechRecognition`) and Web Audio API require Chrome.
 
 ## Tech Stack
 
 | Layer | Technology |
 |---|---|
 | Frontend | React + TypeScript + Vite |
-| Styling | Tailwind CSS |
-| Audio input | Web Audio API (AudioWorklet, AnalyserNode, MediaRecorder) |
-| STT | Whisper ONNX (Small model, ~1.0–1.5 GB VRAM; quantized if needed) |
-| Pitch analysis | Web Audio API DSP via AudioWorklet |
-| Data | Local static files (JSON, images, audio) — no backend, no DB |
+| Styling | Tailwind CSS + shadcn/ui |
+| Audio input | Web Audio API (MediaRecorder) |
+| STT | Web Speech API (`SpeechRecognition`) — Chrome 내장, 실시간, 한국어 지원 |
+| TTS | Web Speech API (`SpeechSynthesis`) — AI 캐릭터 발화 |
+| Pitch analysis | Web Audio API DSP — pitch contour 추출 및 비교 |
+| 2D Avatar | SVG 기반 커스텀 캐릭터 (idle / listening / thinking / talking 상태) |
+| Data | 로컬 정적 파일 (JSON, 이미지) + 인터넷 연결 허용 |
 
 ## Architecture
 
-Five-layer local web application (no backend server, no database):
-
 ```
 src/
-  components/        — React UI components (ScenarioSelect, Roleplay, Feedback)
-  scenarios/         — Scenario data as JSON files
+  components/        — React UI components
+    HomeScreen.tsx       — 시나리오 선택 화면 (shadcn/ui 기반 그리드)
+    RoleplayScreen.tsx   — 비주얼 노벨 스타일 롤플레이 화면 (아바타 + 대화 박스)
+    FeedbackScreen.tsx   — 발음·표현 피드백 화면
+    AvatarCharacter.tsx  — SVG 2D 아바타 캐릭터
+    PitchGraph.tsx       — Canvas 기반 음조 비교 그래프
+  data/
+    scenarios.ts         — 시나리오 데이터 (병원, 은행, 관공서)
   modules/
-    audio.ts         — Web Audio API setup (AudioWorklet, AnalyserNode, MediaRecorder)
-    stt.ts           — Whisper ONNX inference → transcript
-    expressionEval.ts — Text matching: transcript vs. target expressions / keywords
-    pitchAnalysis.ts  — Pitch contour extraction & comparison with reference
-    feedback.ts       — Merges expression + pitch results into unified feedback object
+    audio.ts         — MediaRecorder 래퍼 (AudioRecorder 클래스)
+    stt.ts           — Web Speech API SpeechRecognition → transcript
+    tts.ts           — Web Speech API SpeechSynthesis (AI 캐릭터 발화)
+    expressionEval.ts — transcript vs. targetExpressions / keywords 평가
+    pitchAnalysis.ts  — F0 pitch contour 추출 및 레퍼런스 비교
+    conversation.ts   — 대화 히스토리 관리
 public/
-  images/            — Situation background images (hospital, bank, government office)
-  audio/             — Reference audio files for pitch comparison (per scenario step)
-  models/            — Whisper ONNX model files
+  images/            — 상황별 배경 이미지 (hospital, bank, government)
+  audio/             — 레퍼런스 오디오 (음조 비교용, 미준비)
 ```
 
 **Screen flow:** `Home` → user picks scenario → `Roleplay` (mic input loop) → `Feedback` → retry or back to Home.
+
+## Screen Flow
+
+```
+Home (시나리오 선택)
+  └─ RoleplayScreen (비주얼 노벨 스타일)
+       ├─ AI 캐릭터가 aiText를 TTS로 발화 (SpeechSynthesis)
+       ├─ 사용자 마이크 입력 → Web Speech API → 실시간 transcript
+       ├─ transcript vs. targetExpressions 평가 → 스텝 진행
+       └─ 마지막 스텝 완료 → FeedbackScreen
+```
 
 ## Processing Pipeline
 
 Single utterance → two parallel paths → unified feedback:
 
 ```
-Mic input
-  └─ Web Audio API (AudioWorklet)
-       ├─ [STT path]   Whisper ONNX → transcript → expression evaluation
-       │                  → text feedback (match score, missing keywords)
-       └─ [Pitch path] AudioWorklet DSP → pitch contour → compare with reference contour
-                          → pitch feedback (intonation graph, error region highlights)
-                                    ↓
-                          Unified Feedback Screen
-                          (expression score + pitch contour overlay graph)
+Mic input (MediaRecorder)
+  ├─ [STT path]   Web Speech API SpeechRecognition → 실시간 transcript
+  │                  → expressionEval → match score, missing keywords
+  └─ [Pitch path] Web Audio API → F0 pitch contour → reference 비교
+                      → pitch feedback (intonation graph, error region highlights)
+                                ↓
+                      Unified Feedback Screen
+                      (expression score + pitch contour overlay graph)
 ```
 
 ## Feedback Design
@@ -121,17 +137,17 @@ Each scenario is a JSON file in `src/scenarios/`. Structure:
 }
 ```
 
-## Local Data Assets
+## Data Assets
 
-- `public/images/` — situation background images
-- `public/audio/` — reference audio per scenario step (for pitch comparison baseline)
-- `public/models/` — Whisper ONNX model files (`whisper_small.onnx` or quantized variant)
-
-No personal data is collected or stored. All assets are local static files.
+- `public/images/` — 상황별 배경 이미지 (hospital.png, bank.png, government.png)
+- `public/audio/` — 레퍼런스 오디오 (음조 비교 기준선, 미준비 — Google TTS로 생성 예정)
+- 시나리오 데이터: `src/data/scenarios.ts` (JSON 아닌 TypeScript 정적 데이터)
 
 ## Key Implementation Notes
 
-- **Whisper ONNX**: runs entirely in-browser via `onnxruntime-web`. Target model: `whisper-small` (~1.0–1.5 GB VRAM). Fall back to quantized version if memory is constrained.
-- **Pitch normalization**: normalize both user and reference pitch contours before comparison to account for different vocal ranges across speakers.
-- **Parallel processing**: STT and pitch analysis run concurrently on the same audio blob; results are merged before rendering the feedback screen.
-- **No network dependency**: all inference and data lookup is local — the app must work fully offline after initial load.
+- **STT**: Web Speech API `SpeechRecognition` 사용. Chrome 내장이므로 모델 다운로드 불필요, 실시간 인식 가능. 인터넷 연결 필요 (Google 음성인식 서버 사용).
+- **TTS**: Web Speech API `SpeechSynthesis` 사용. AI 캐릭터 발화에 활용.
+- **롤플레이 UI**: 비주얼 노벨 스타일 — 배경 이미지 풀스크린, SVG 아바타 중앙 배치, 하단 반투명 대화 박스.
+- **아바타 상태**: `idle | listening | thinking | talking` — TTS/STT 상태에 따라 자동 전환.
+- **Pitch normalization**: 사용자와 레퍼런스 pitch contour를 log2 스케일 + z-score 정규화 후 비교.
+- **누적 점수**: 롤플레이 전 스텝의 표현 점수를 평균내어 최종 FeedbackScreen에 전달.

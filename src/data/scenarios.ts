@@ -8,6 +8,7 @@ export const scenarios: Scenario[] = [
     description: '아플 때 병원에서 말하는 법을 연습해요',
     difficulty: '초급',
     image: '/images/hospital.png',
+    voice: 'nara',
     character: { name: '이주연 간호사', role: '병원 접수 담당' },
     steps: [
       {
@@ -51,6 +52,7 @@ export const scenarios: Scenario[] = [
     description: '은행에서 계좌 개설·송금하는 법을 연습해요',
     difficulty: '초급',
     image: '/images/bank.png',
+    voice: 'nminsang',
     character: { name: '박준호 은행원', role: '은행 창구 직원' },
     steps: [
       {
@@ -86,6 +88,7 @@ export const scenarios: Scenario[] = [
     description: '주민센터에서 서류 발급 받는 법을 연습해요',
     difficulty: '중급',
     image: '/images/government.png',
+    voice: 'njiyun',
     character: { name: '이수진 공무원', role: '주민센터 민원 담당' },
     steps: [
       {

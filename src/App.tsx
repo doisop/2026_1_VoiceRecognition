@@ -1,8 +1,10 @@
 import { useState } from 'react'
-import type { Screen, Scenario, FeedbackResult } from './types'
+import type { Scenario, FeedbackResult } from './types'
 import HomeScreen from './components/HomeScreen'
 import RoleplayScreen from './components/RoleplayScreen'
 import FeedbackScreen from './components/FeedbackScreen'
+
+type Screen = 'home' | 'roleplay' | 'feedback'
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('home')
@@ -31,7 +33,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-background">
       {screen === 'home' && (
         <HomeScreen onSelect={handleSelectScenario} />
       )}

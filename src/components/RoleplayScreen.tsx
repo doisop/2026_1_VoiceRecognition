@@ -1,9 +1,12 @@
 import { useState, useRef, useEffect } from 'react'
-import type { Scenario, FeedbackResult, ScenarioStep } from '../types'
+import type { Scenario, FeedbackResult } from '../types'
 import { evaluateExpression } from '../modules/expressionEval'
 import { AudioRecorder } from '../modules/audio'
-import { loadWhisper, transcribeBlob, isWhisperLoaded } from '../modules/stt'
+import { SpeechRecognizer } from '../modules/stt'
 import { analyzePitch } from '../modules/pitchAnalysis'
+import { speak, stopSpeaking, initVoices } from '../modules/tts'
+import AvatarCharacter, { type AvatarState } from './AvatarCharacter'
+import { Mic, MicOff, X } from 'lucide-react'
 
 interface Props {
   scenario: Scenario
@@ -11,215 +14,263 @@ interface Props {
   onBack: () => void
 }
 
-type StepState = 'loading' | 'idle' | 'recording' | 'processing'
+type StepState = 'speaking' | 'idle' | 'recording' | 'processing'
+
+interface DialogLine {
+  speaker: string   // character name or '나'
+  text: string
+  score?: number
+}
 
 export default function RoleplayScreen({ scenario, onFeedback, onBack }: Props) {
   const [stepIndex, setStepIndex] = useState(0)
-  const [stepState, setStepState] = useState<StepState>(
-    isWhisperLoaded() ? 'idle' : 'loading'
-  )
-  const [loadPct, setLoadPct] = useState(0)
-  const [transcript, setTranscript] = useState('')
+  const [stepState, setStepState] = useState<StepState>('speaking')
+  const [dialogLine, setDialogLine] = useState<DialogLine>({
+    speaker: scenario.character.name,
+    text: '...',
+  })
+  const [avatarState, setAvatarState] = useState<AvatarState>('idle')
   const recorderRef = useRef<AudioRecorder | null>(null)
+  const recognizerRef = useRef<SpeechRecognizer | null>(null)
 
-  const step: ScenarioStep = scenario.steps[stepIndex]
+  const scoresRef = useRef<number[]>([])
+  const feedbackRef = useRef<string[]>([])
+  const lastPitchRef = useRef<Omit<FeedbackResult, 'transcript' | 'expressionScore' | 'expressionFeedback'>>({
+    pitchContourUser: [],
+    pitchContourRef: [],
+    pitchFeedback: '',
+    pitchDivergentRegions: [],
+  })
+
+  const step = scenario.steps[stepIndex]
   const progress = (stepIndex / scenario.steps.length) * 100
 
-  // Load Whisper model as soon as screen opens
   useEffect(() => {
-    if (isWhisperLoaded()) return
-    loadWhisper((pct) => setLoadPct(Math.round(pct)))
-      .then(() => setStepState('idle'))
-      .catch((err) => {
-        console.error('Whisper load failed:', err)
-        setStepState('idle') // fall back gracefully
-      })
+    initVoices()
+    speakStep(0)
+    return () => {
+      stopSpeaking()
+      recognizerRef.current?.abort()
+    }
   }, [])
 
+  function speakStep(idx: number) {
+    const aiText = scenario.steps[idx].aiText
+    setDialogLine({ speaker: scenario.character.name, text: aiText })
+    setAvatarState('talking')
+    setStepState('speaking')
+    speak(aiText, {
+      speaker: scenario.voice as import('../modules/tts').ClovaVoice,
+      onEnd: () => {
+        setAvatarState('listening')
+        setStepState('idle')
+      },
+    })
+  }
+
   async function startRecording() {
-    setTranscript('')
+    if (stepState !== 'idle') return
+    stopSpeaking()
+    setAvatarState('idle')
     setStepState('recording')
+    setDialogLine({ speaker: '나', text: '말하는 중...' })
+
     recorderRef.current = new AudioRecorder()
+    recognizerRef.current = new SpeechRecognizer()
     await recorderRef.current.start()
+    recognizerRef.current.start('ko-KR')
   }
 
   async function stopRecording() {
-    if (!recorderRef.current) return
+    if (!recorderRef.current || !recognizerRef.current) return
     setStepState('processing')
+    setAvatarState('thinking')
+    setDialogLine({ speaker: '나', text: '분석 중...' })
 
-    const blob = await recorderRef.current.stop()
-
-    // Run STT and pitch analysis in parallel
-    const [sttResult, pitchResult] = await Promise.all([
-      transcribeBlob(blob).catch(() => ''),
-      analyzePitch(blob, step.referenceAudio),
+    // MediaRecorder(pitch용)와 SpeechRecognition(STT)을 동시에 종료
+    const [blob, transcript] = await Promise.all([
+      recorderRef.current.stop(),
+      recognizerRef.current.stop().catch(() => ''),
     ])
 
-    const text = sttResult
-    setTranscript(text)
+    // pitch 분석은 마지막 스텝에서만 실행 (중간 스텝은 불필요)
+    const pitchResult = step.isLast
+      ? await analyzePitch(blob, step.referenceAudio)
+      : { contourUser: [] as number[], contourRef: null, feedback: '', divergentRegions: [] as [number, number][] }
 
-    const evalResult = evaluateExpression(text, step)
-
-    const result: FeedbackResult = {
-      transcript: text,
-      expressionScore: evalResult.score,
-      expressionFeedback: evalResult.feedback,
+    const evalResult = evaluateExpression(transcript, step)
+    scoresRef.current.push(evalResult.score)
+    feedbackRef.current.push(...evalResult.feedback)
+    lastPitchRef.current = {
       pitchContourUser: pitchResult.contourUser,
       pitchContourRef: pitchResult.contourRef ?? [],
       pitchFeedback: pitchResult.feedback,
       pitchDivergentRegions: pitchResult.divergentRegions,
     }
 
+    setDialogLine({ speaker: '나', text: transcript || '(인식 실패)', score: evalResult.score })
+
     if (step.isLast) {
-      onFeedback(result)
+      const avgScore = Math.round(
+        scoresRef.current.reduce((a, b) => a + b, 0) / scoresRef.current.length
+      )
+      setTimeout(() => onFeedback({
+        transcript,
+        expressionScore: avgScore,
+        expressionFeedback: feedbackRef.current,
+        ...lastPitchRef.current,
+      }), 1200)
     } else {
       setTimeout(() => {
-        setStepIndex((i) => i + 1)
-        setStepState('idle')
-        setTranscript('')
-      }, 1800)
+        const next = stepIndex + 1
+        setStepIndex(next)
+        speakStep(next)
+      }, 1200)
     }
   }
 
   function handleChipClick(phrase: string) {
     if (stepState !== 'idle') return
+    stopSpeaking()
     const evalResult = evaluateExpression(phrase, step)
-    const result: FeedbackResult = {
-      transcript: phrase,
-      expressionScore: evalResult.score,
-      expressionFeedback: evalResult.feedback,
-      pitchContourUser: [],
-      pitchContourRef: [],
-      pitchFeedback: '힌트 선택 — 음조 분석 없음',
-      pitchDivergentRegions: [],
-    }
+    scoresRef.current.push(evalResult.score)
+    feedbackRef.current.push(...evalResult.feedback)
+    setDialogLine({ speaker: '나', text: phrase, score: evalResult.score })
+
     if (step.isLast) {
-      onFeedback(result)
+      const avgScore = Math.round(
+        scoresRef.current.reduce((a, b) => a + b, 0) / scoresRef.current.length
+      )
+      setTimeout(() => onFeedback({
+        transcript: phrase,
+        expressionScore: avgScore,
+        expressionFeedback: feedbackRef.current,
+        pitchContourUser: [],
+        pitchContourRef: [],
+        pitchFeedback: '힌트 선택 — 음조 분석 없음',
+        pitchDivergentRegions: [],
+      }), 900)
     } else {
       setTimeout(() => {
-        setStepIndex((i) => i + 1)
-        setTranscript('')
-      }, 1000)
+        const next = stepIndex + 1
+        setStepIndex(next)
+        speakStep(next)
+      }, 900)
     }
   }
 
+  const isUserTurn = stepState === 'idle'
+
   return (
     <div
-      className="flex flex-col h-screen bg-gray-900 relative"
-      style={{
-        backgroundImage: `url('${scenario.image}')`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center top',
-      }}
+      className="h-screen relative overflow-hidden"
+      style={{ backgroundImage: `url('${scenario.image}')`, backgroundSize: 'cover', backgroundPosition: 'center top' }}
     >
-      {/* Scrim */}
-      <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/10 to-black/80 pointer-events-none" />
+      {/* ── Background scrim ── */}
+      <div className="absolute inset-0 bg-black/20 pointer-events-none" />
 
-      {/* Header */}
-      <div className="relative z-10 flex items-center gap-3 px-4 py-3 bg-black/40 backdrop-blur-md">
-        <button onClick={onBack} className="text-white text-xl px-1">←</button>
-        <div className="flex-1">
-          <p className="text-white font-bold text-sm">{scenario.title}</p>
-          <p className="text-white/60 text-xs">{scenario.character.name} · {scenario.character.role}</p>
+      {/* ── Header ── */}
+      <div className="absolute top-0 left-0 right-0 z-30 flex items-center justify-between px-5 py-3">
+        <button
+          onClick={() => { stopSpeaking(); onBack() }}
+          className="w-8 h-8 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center text-white/80 hover:text-white hover:bg-black/60 transition-colors"
+        >
+          <X className="w-4 h-4" />
+        </button>
+
+        {/* Progress bar */}
+        <div className="flex-1 mx-4 h-1 bg-white/20 rounded-full overflow-hidden">
+          <div className="h-full bg-white/70 transition-all duration-500" style={{ width: `${progress}%` }} />
         </div>
-        <span className="text-white/80 text-xs bg-white/20 px-3 py-1 rounded-full">
+
+        <span className="text-xs text-white/80 bg-black/40 backdrop-blur-sm px-2.5 py-1 rounded-full">
           {stepIndex + 1} / {scenario.steps.length}
         </span>
       </div>
 
-      {/* Progress bar */}
-      <div className="relative z-10 h-1 bg-white/20">
-        <div
-          className="h-full bg-white/70 transition-all duration-500"
-          style={{ width: `${progress}%` }}
-        />
+      {/* ── Avatar — centered, lower body overlaps dialog box ── */}
+      <div className="absolute left-1/2 -translate-x-1/2 bottom-[26%] z-10"
+           style={{ height: '72%', aspectRatio: '3/4' }}>
+        <AvatarCharacter state={avatarState} className="w-full h-full" />
       </div>
 
-      {/* Chat area */}
-      <div className="relative z-10 flex-1 flex flex-col justify-end px-4 pb-4 gap-3">
-        {/* AI bubble */}
-        <div className="flex items-end gap-2">
-          <div className="bg-white/90 backdrop-blur rounded-2xl rounded-bl-sm px-4 py-3 max-w-[80%] shadow">
-            <p className="text-xs text-gray-500 mb-1">{scenario.character.name}</p>
-            <p className="text-gray-900 text-sm font-medium">{step.aiText}</p>
+      {/* ── VN Dialog box ── */}
+      <div className="absolute bottom-0 left-0 right-0 z-20" style={{ height: '28%' }}>
+        {/* Glass panel */}
+        <div className="h-full bg-black/65 backdrop-blur-md border-t border-white/15 flex flex-col px-6 py-4 gap-2">
+
+          {/* Speaker name tag */}
+          <div className="flex items-center gap-3">
+            <span className={`text-sm font-bold px-3 py-0.5 rounded ${
+              dialogLine.speaker === '나'
+                ? 'bg-indigo-600/80 text-white'
+                : 'bg-white/15 text-white'
+            }`}>
+              {dialogLine.speaker}
+            </span>
+
+            {/* Score badge (user turn result) */}
+            {dialogLine.score !== undefined && (
+              <span className={`text-xs font-semibold px-2 py-0.5 rounded ${
+                dialogLine.score >= 80 ? 'bg-emerald-500/80 text-white' :
+                dialogLine.score >= 50 ? 'bg-amber-500/80 text-white' :
+                'bg-rose-500/80 text-white'
+              }`}>
+                {dialogLine.score}점
+              </span>
+            )}
+
+            {/* State indicator dot */}
+            <div className={`w-1.5 h-1.5 rounded-full ml-auto ${
+              stepState === 'recording'  ? 'bg-red-400 animate-pulse' :
+              stepState === 'speaking'   ? 'bg-indigo-400 animate-pulse' :
+              stepState === 'processing' ? 'bg-amber-400 animate-pulse' :
+              'bg-green-400'
+            }`} />
           </div>
-        </div>
 
-        {/* User transcript bubble */}
-        {transcript && (
-          <div className="flex justify-end">
-            <div className="bg-indigo-600 text-white rounded-2xl rounded-br-sm px-4 py-3 max-w-[80%] shadow text-sm">
-              {transcript}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Bottom panel */}
-      <div className="relative z-10 bg-black/70 backdrop-blur-xl border-t border-white/10 px-4 pt-3 pb-8">
-
-        {/* Model loading bar */}
-        {stepState === 'loading' && (
-          <div className="mb-4">
-            <div className="flex justify-between text-xs text-white/60 mb-1">
-              <span>Whisper 모델 로딩 중...</span>
-              <span>{loadPct}%</span>
-            </div>
-            <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-indigo-400 transition-all duration-300"
-                style={{ width: `${loadPct}%` }}
-              />
-            </div>
-            <p className="text-xs text-white/40 mt-1">첫 실행 시 모델 파일을 다운로드합니다 (~250 MB)</p>
-          </div>
-        )}
-
-        {/* Hint chips */}
-        {stepState !== 'loading' && (
-          <div className="flex flex-wrap gap-2 mb-4">
-            {step.targetExpressions.slice(0, 3).map((expr) => (
-              <button
-                key={expr}
-                onClick={() => handleChipClick(expr)}
-                disabled={stepState !== 'idle'}
-                className="text-xs text-white/80 border border-white/30 rounded-full px-3 py-1.5 hover:bg-white/20 transition-colors disabled:opacity-40"
-              >
-                {expr}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* Mic button */}
-        <div className="flex flex-col items-center gap-2">
-          {stepState === 'idle' && (
-            <button
-              onClick={startRecording}
-              className="w-16 h-16 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white text-2xl shadow-lg transition-colors"
-            >
-              🎤
-            </button>
-          )}
-          {stepState === 'recording' && (
-            <button
-              onClick={stopRecording}
-              className="w-16 h-16 rounded-full bg-red-500 hover:bg-red-400 text-white text-2xl shadow-lg animate-pulse"
-            >
-              ⏹
-            </button>
-          )}
-          {(stepState === 'processing' || stepState === 'loading') && (
-            <div className="w-16 h-16 rounded-full bg-gray-600 flex items-center justify-center">
-              <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-            </div>
-          )}
-          <p className="text-white/50 text-xs text-center">
-            {stepState === 'idle' && '마이크를 눌러 말하세요'}
-            {stepState === 'recording' && '말하는 중… 멈추려면 누르세요'}
-            {stepState === 'processing' && 'STT · 음조 분석 중…'}
-            {stepState === 'loading' && '잠시만 기다려 주세요'}
+          {/* Dialog text */}
+          <p className="text-white text-sm leading-relaxed flex-1">
+            {dialogLine.text}
           </p>
+
+          {/* Controls row (idle only) */}
+          {isUserTurn && (
+            <div className="flex items-center gap-2">
+              {/* Hint chips */}
+              <div className="flex gap-1.5 flex-1 flex-wrap">
+                {step.targetExpressions.slice(0, 2).map((expr) => (
+                  <button
+                    key={expr}
+                    onClick={() => handleChipClick(expr)}
+                    className="text-xs text-white/70 border border-white/25 rounded-full px-2.5 py-1 hover:bg-white/15 hover:text-white transition-colors"
+                  >
+                    {expr}
+                  </button>
+                ))}
+              </div>
+
+              {/* Mic button */}
+              <button
+                onClick={startRecording}
+                className="w-11 h-11 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white flex items-center justify-center shadow-lg transition-colors flex-shrink-0"
+              >
+                <Mic className="w-5 h-5" />
+              </button>
+            </div>
+          )}
+
+          {/* Recording stop button */}
+          {stepState === 'recording' && (
+            <div className="flex justify-end">
+              <button
+                onClick={stopRecording}
+                className="w-11 h-11 rounded-full bg-red-500 hover:bg-red-400 text-white flex items-center justify-center shadow-lg animate-pulse transition-colors"
+              >
+                <MicOff className="w-5 h-5" />
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -16,6 +16,7 @@ export interface Scenario {
   description: string
   difficulty: '초급' | '중급' | '고급'
   image: string
+  voice: string   // Naver Clova Voice speaker ID
   character: {
     name: string
     role: string
