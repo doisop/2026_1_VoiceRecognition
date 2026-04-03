@@ -4,7 +4,7 @@ import { evaluateExpression } from '../modules/expressionEval'
 import { AudioRecorder } from '../modules/audio'
 import { loadWhisper, transcribeBlob, isWhisperLoaded } from '../modules/stt'
 import { analyzePitch } from '../modules/pitchAnalysis'
-import { speak, stopSpeaking, initVoices } from '../modules/tts'
+import { speak, stopSpeaking, initVoices, warmUpAudio } from '../modules/tts'
 import AvatarCharacter, { type AvatarState } from './AvatarCharacter'
 import { Mic, MicOff, X } from 'lucide-react'
 
@@ -46,11 +46,13 @@ export default function RoleplayScreen({ scenario, onFeedback, onBack }: Props) 
 
   useEffect(() => {
     initVoices()
-    if (!isWhisperLoaded()) {
-      loadWhisper().then(() => speakStep(0))
-    } else {
-      speakStep(0)
-    }
+    warmUpAudio().then(() => {
+      if (!isWhisperLoaded()) {
+        loadWhisper().then(() => speakStep(0))
+      } else {
+        speakStep(0)
+      }
+    })
     return () => stopSpeaking()
   }, [])
 
@@ -60,7 +62,7 @@ export default function RoleplayScreen({ scenario, onFeedback, onBack }: Props) 
     setAvatarState('talking')
     setStepState('speaking')
     speak(aiText, {
-      speaker: scenario.voice as import('../modules/tts').ClovaVoice,
+      voice: scenario.voice as import('../modules/tts').GoogleVoice,
       onEnd: () => {
         setAvatarState('listening')
         setStepState('idle')

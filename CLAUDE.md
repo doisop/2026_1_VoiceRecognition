@@ -28,7 +28,7 @@ npm run dev
 | Frontend | React + TypeScript + Vite |
 | Styling | Tailwind CSS + shadcn/ui |
 | Audio input | Web Audio API (MediaRecorder) |
-| STT | Web Speech API (`SpeechRecognition`) — Chrome 내장, 실시간, 한국어 지원 |
+| STT | Modal 원격 Whisper API — 오디오 Blob POST 전송, `VITE_MODAL_STT_URL` 환경변수 |
 | TTS | Web Speech API (`SpeechSynthesis`) — AI 캐릭터 발화 |
 | Pitch analysis | Web Audio API DSP — pitch contour 추출 및 비교 |
 | 2D Avatar | SVG 기반 커스텀 캐릭터 (idle / listening / thinking / talking 상태) |
@@ -48,11 +48,10 @@ src/
     scenarios.ts         — 시나리오 데이터 (병원, 은행, 관공서)
   modules/
     audio.ts         — MediaRecorder 래퍼 (AudioRecorder 클래스)
-    stt.ts           — Web Speech API SpeechRecognition → transcript
+    stt.ts           — Modal 원격 Whisper API → transcript (transcribeBlob)
     tts.ts           — Web Speech API SpeechSynthesis (AI 캐릭터 발화)
     expressionEval.ts — transcript vs. targetExpressions / keywords 평가
     pitchAnalysis.ts  — F0 pitch contour 추출 및 레퍼런스 비교
-    conversation.ts   — 대화 히스토리 관리
 public/
   images/            — 상황별 배경 이미지 (hospital, bank, government)
   audio/             — 레퍼런스 오디오 (음조 비교용, 미준비)
@@ -66,7 +65,7 @@ public/
 Home (시나리오 선택)
   └─ RoleplayScreen (비주얼 노벨 스타일)
        ├─ AI 캐릭터가 aiText를 TTS로 발화 (SpeechSynthesis)
-       ├─ 사용자 마이크 입력 → Web Speech API → 실시간 transcript
+       ├─ 사용자 마이크 입력 → MediaRecorder → Modal Whisper API → transcript
        ├─ transcript vs. targetExpressions 평가 → 스텝 진행
        └─ 마지막 스텝 완료 → FeedbackScreen
 ```
@@ -77,7 +76,7 @@ Single utterance → two parallel paths → unified feedback:
 
 ```
 Mic input (MediaRecorder)
-  ├─ [STT path]   Web Speech API SpeechRecognition → 실시간 transcript
+  ├─ [STT path]   오디오 Blob → Modal Whisper API → transcript
   │                  → expressionEval → match score, missing keywords
   └─ [Pitch path] Web Audio API → F0 pitch contour → reference 비교
                       → pitch feedback (intonation graph, error region highlights)
@@ -145,7 +144,7 @@ Each scenario is a JSON file in `src/scenarios/`. Structure:
 
 ## Key Implementation Notes
 
-- **STT**: Web Speech API `SpeechRecognition` 사용. Chrome 내장이므로 모델 다운로드 불필요, 실시간 인식 가능. 인터넷 연결 필요 (Google 음성인식 서버 사용).
+- **STT**: Modal 원격 Whisper API 사용. 녹음된 오디오 Blob을 POST로 전송해 transcript 수신. 엔드포인트는 `VITE_MODAL_STT_URL` 환경변수로 지정 (미설정 시 기본 URL 사용).
 - **TTS**: Web Speech API `SpeechSynthesis` 사용. AI 캐릭터 발화에 활용.
 - **롤플레이 UI**: 비주얼 노벨 스타일 — 배경 이미지 풀스크린, SVG 아바타 중앙 배치, 하단 반투명 대화 박스.
 - **아바타 상태**: `idle | listening | thinking | talking` — TTS/STT 상태에 따라 자동 전환.

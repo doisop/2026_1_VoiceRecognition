@@ -2,7 +2,6 @@ import { MapPin, ChevronRight, Mic } from 'lucide-react'
 import type { Scenario } from '../types'
 import { scenarios } from '../data/scenarios'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 
 interface Props {
   onSelect: (sc: Scenario) => void
@@ -116,10 +115,10 @@ function ScenarioCard({
             <span>{sc.steps.length}단계</span>
           </div>
 
-          <Button variant="glass" size="sm" className="gap-1 pointer-events-none">
+          <div className="flex items-center gap-1 text-xs font-medium text-primary border border-primary/30 rounded-md px-2.5 py-1.5">
             시작
             <ChevronRight className="w-3.5 h-3.5" />
-          </Button>
+          </div>
         </div>
       </div>
     </button>

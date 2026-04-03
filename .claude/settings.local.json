@@ -4,7 +4,8 @@
       "Bash(npm create:*)",
       "Bash(npx --yes create-vite@5 . --template react-ts)",
       "Bash(npm install:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "WebFetch(domain:docs.cloud.google.com)"
     ]
   }
 }

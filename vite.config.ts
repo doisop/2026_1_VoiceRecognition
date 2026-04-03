@@ -14,20 +14,11 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       proxy: {
-        // /api/tts → Naver Clova Voice API (CORS 우회 + API 키 서버 측 주입)
+        // /api/tts → Google Cloud TTS (CORS 우회 + API 키 서버 측 주입)
         '/api/tts': {
-          target: 'https://naveropenapi.apigw.ntruss.com',
+          target: 'https://texttospeech.googleapis.com',
           changeOrigin: true,
-          rewrite: () => '/tts-premium/v1/tts',
-          configure: (proxy) => {
-            proxy.on('proxyReq', (proxyReq) => {
-              const id     = env.NAVER_CLIENT_ID ?? ''
-              const secret = env.NAVER_CLIENT_SECRET ?? ''
-              const isAscii = (s: string) => /^[\x20-\x7E]+$/.test(s)
-              if (id     && isAscii(id))     proxyReq.setHeader('X-NCP-APIGW-API-KEY-ID', id)
-              if (secret && isAscii(secret)) proxyReq.setHeader('X-NCP-APIGW-API-KEY', secret)
-            })
-          },
+          rewrite: () => `/v1/text:synthesize?key=${env.GOOGLE_TTS_API_KEY ?? ''}`,
         },
       },
     },
