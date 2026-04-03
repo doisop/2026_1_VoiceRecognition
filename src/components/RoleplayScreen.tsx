@@ -3,6 +3,7 @@ import type { Scenario, FeedbackResult } from '../types'
 import { evaluateExpression } from '../modules/expressionEval'
 import { AudioRecorder } from '../modules/audio'
 import { loadWhisper, transcribeBlob, isWhisperLoaded } from '../modules/stt'
+import { sendToLLM } from '../modules/llm'
 import { analyzePitch } from '../modules/pitchAnalysis'
 import { speak, stopSpeaking, initVoices, warmUpAudio } from '../modules/tts'
 import AvatarCharacter, { type AvatarState } from './AvatarCharacter'
@@ -98,6 +99,20 @@ export default function RoleplayScreen({ scenario, onFeedback, onBack }: Props) 
     const evalResult = evaluateExpression(transcript, step)
     scoresRef.current.push(evalResult.score)
     feedbackRef.current.push(...evalResult.feedback)
+
+    if (transcript) {
+      sendToLLM(transcript, {
+        scenarioTitle: scenario.title,
+        characterName: scenario.character.name,
+        characterRole: scenario.character.role,
+        aiText: step.aiText,
+        targetExpressions: step.targetExpressions,
+      })
+        .then((llmFeedback) => {
+          if (llmFeedback) feedbackRef.current.push(`[AI 피드백] ${llmFeedback}`)
+        })
+        .catch((err) => console.warn('[LLM] 피드백 실패:', err))
+    }
     lastPitchRef.current = {
       pitchContourUser: pitchResult.contourUser,
       pitchContourRef: pitchResult.contourRef ?? [],
