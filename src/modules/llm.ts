@@ -9,9 +9,7 @@
 const GEMINI_MODEL = "gemini-2.5-pro";
 const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 
-const GEMINI_API_KEY =
-  ((import.meta as unknown as { env?: Record<string, string | undefined> }).env?.VITE_GEMINI_API_KEY) ??
-  "AIzaSyC670oAp_pyY72K-w5gexFrTo0SbmBO3m0"
+const GEMINI_API_KEY = (import.meta as unknown as { env: Record<string, string | undefined> }).env.VITE_GEMINI_API_KEY
 
 const REQUEST_TIMEOUT_MS = 60_000
 
