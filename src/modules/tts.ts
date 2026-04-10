@@ -140,6 +140,35 @@ export function initVoices(): void {
   }
 }
 
+/**
+ * 텍스트를 Google TTS로 합성해 Blob으로 반환한다 (재생하지 않음).
+ * 발음 분석용 레퍼런스 오디오 생성에 사용.
+ */
+export async function synthesizeToBlob(
+  text: string,
+  voice: GoogleVoice = 'ko-KR-Neural2-A'
+): Promise<Blob> {
+  const body = {
+    input: { text },
+    voice: { languageCode: 'ko-KR', name: voice },
+    audioConfig: { audioEncoding: 'MP3', speakingRate: 1.0, pitch: 0 },
+  }
+
+  const res = await fetch('/api/tts', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+
+  if (!res.ok) throw new Error(`Google TTS API 오류: ${res.status}`)
+
+  const data = await res.json() as { audioContent: string }
+  const binary = atob(data.audioContent)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+  return new Blob([bytes.buffer], { type: 'audio/mp3' })
+}
+
 /** 오디오 하드웨어를 미리 초기화. RoleplayScreen 진입 시 호출하면 첫 TTS 앞부분 잘림 방지. */
 export async function warmUpAudio(): Promise<void> {
   const ctx = getAudioCtx()

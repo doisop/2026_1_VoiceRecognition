@@ -3,9 +3,10 @@ import type { Scenario, FeedbackResult } from '../types'
 import { evaluateExpression } from '../modules/expressionEval'
 import { AudioRecorder } from '../modules/audio'
 import { loadWhisper, transcribeBlob, isWhisperLoaded } from '../modules/stt'
-import { sendToLLM } from '../modules/llm'
+import { analyzeUtterance } from '../modules/llm'
 import { analyzePitch } from '../modules/pitchAnalysis'
-import { speak, stopSpeaking, initVoices, warmUpAudio } from '../modules/tts'
+import { analyzePronunciation } from '../modules/pronunciationAnalysis'
+import { speak, stopSpeaking, initVoices, warmUpAudio, synthesizeToBlob } from '../modules/tts'
 import AvatarCharacter, { type AvatarState } from './AvatarCharacter'
 import { Mic, MicOff, X } from 'lucide-react'
 
@@ -21,6 +22,7 @@ interface DialogLine {
   speaker: string
   text: string
   score?: number
+  pronunciationFeedback?: string
 }
 
 export default function RoleplayScreen({ scenario, onFeedback, onBack }: Props) {
@@ -100,19 +102,6 @@ export default function RoleplayScreen({ scenario, onFeedback, onBack }: Props) 
     scoresRef.current.push(evalResult.score)
     feedbackRef.current.push(...evalResult.feedback)
 
-    if (transcript) {
-      sendToLLM(transcript, {
-        scenarioTitle: scenario.title,
-        characterName: scenario.character.name,
-        characterRole: scenario.character.role,
-        aiText: step.aiText,
-        targetExpressions: step.targetExpressions,
-      })
-        .then((llmFeedback) => {
-          if (llmFeedback) feedbackRef.current.push(`[AI 피드백] ${llmFeedback}`)
-        })
-        .catch((err) => console.warn('[LLM] 피드백 실패:', err))
-    }
     lastPitchRef.current = {
       pitchContourUser: pitchResult.contourUser,
       pitchContourRef: pitchResult.contourRef ?? [],
@@ -120,24 +109,95 @@ export default function RoleplayScreen({ scenario, onFeedback, onBack }: Props) 
       pitchDivergentRegions: pitchResult.divergentRegions,
     }
 
-    setDialogLine({ speaker: '나', text: transcript || '(인식 실패)', score: evalResult.score })
+    // 사용자 발화 + 점수 대화창에 표시
+    setDialogLine({
+      speaker: '나',
+      text: transcript || '(인식 실패)',
+      score: evalResult.score,
+    })
+
+    // ── LLM 분석: 표현 피드백 + 발음 의도 텍스트 (단일 API 호출) ──────────────
+    const llmContext = {
+      scenarioTitle: scenario.title,
+      characterName: scenario.character.name,
+      characterRole: scenario.character.role,
+      aiText: step.aiText,
+      targetExpressions: step.targetExpressions,
+    }
+
+    const { expressionFeedback, intendedText } = transcript
+      ? await analyzeUtterance(transcript, llmContext).catch((err) => {
+          console.warn('[LLM] 분석 실패:', err)
+          return { expressionFeedback: '', intendedText: transcript }
+        })
+      : { expressionFeedback: '', intendedText: '' }
+
+    // ── 발음 분석: 의도 텍스트와 STT가 다를 때 TTS 레퍼런스 생성 후 비교 ───────
+    let pronFeedback = ''
+    if (transcript && intendedText && intendedText !== transcript) {
+      console.log(`[발음] 의도 텍스트 감지: "${transcript}" → "${intendedText}"`)
+
+      // 텍스트 수준 음절 diff (빠른 피드백)
+      const pronResult = analyzePronunciation(transcript, [intendedText])
+      if (pronResult.hasError) {
+        pronFeedback = pronResult.feedback
+        feedbackRef.current.push(`[발음 피드백] ${pronFeedback}`)
+      }
+
+      // TTS로 레퍼런스 오디오 생성 → 사용자 오디오와 피치 비교
+      synthesizeToBlob(intendedText, scenario.voice as import('../modules/tts').GoogleVoice)
+        .then((refBlob) => analyzePitch(blob, refBlob))
+        .then((pitchCmp) => {
+          if (pitchCmp.feedback) {
+            feedbackRef.current.push(`[억양 피드백] ${pitchCmp.feedback}`)
+          }
+          lastPitchRef.current = {
+            pitchContourUser: pitchCmp.contourUser,
+            pitchContourRef: pitchCmp.contourRef ?? [],
+            pitchFeedback: pitchCmp.feedback,
+            pitchDivergentRegions: pitchCmp.divergentRegions,
+          }
+          console.log('[발음] 피치 비교 완료:', pitchCmp.feedback)
+        })
+        .catch((err) => console.warn('[발음] 피치 비교 실패:', err))
+    }
+
+    // ── 표현 + 발음 피드백을 대화창에 표시하고 TTS로 발화 ───────────────────────
+    if (expressionFeedback) {
+      feedbackRef.current.push(`[표현 피드백] ${expressionFeedback}`)
+    }
+
+    const combinedFeedback = [expressionFeedback, pronFeedback].filter(Boolean).join(' ')
+
+    if (combinedFeedback) {
+      setAvatarState('talking')
+      setDialogLine({
+        speaker: scenario.character.name,
+        text: combinedFeedback,
+        pronunciationFeedback: pronFeedback || undefined,
+      })
+      await new Promise<void>((resolve) => {
+        speak(combinedFeedback, {
+          voice: scenario.voice as import('../modules/tts').GoogleVoice,
+          onEnd: resolve,
+        })
+      })
+    }
 
     if (step.isLast) {
       const avgScore = Math.round(
         scoresRef.current.reduce((a, b) => a + b, 0) / scoresRef.current.length
       )
-      setTimeout(() => onFeedback({
+      onFeedback({
         transcript,
         expressionScore: avgScore,
         expressionFeedback: feedbackRef.current,
         ...lastPitchRef.current,
-      }), 1200)
+      })
     } else {
-      setTimeout(() => {
-        const next = stepIndex + 1
-        setStepIndex(next)
-        speakStep(next)
-      }, 1200)
+      const next = stepIndex + 1
+      setStepIndex(next)
+      speakStep(next)
     }
   }
 
@@ -241,6 +301,13 @@ export default function RoleplayScreen({ scenario, onFeedback, onBack }: Props) 
           <p className="text-white text-sm leading-relaxed flex-1">
             {dialogLine.text}
           </p>
+
+          {/* 발음 피드백 */}
+          {dialogLine.pronunciationFeedback && (
+            <p className="text-amber-300 text-xs leading-snug border-t border-white/10 pt-1.5">
+              {dialogLine.pronunciationFeedback}
+            </p>
+          )}
 
           {/* Controls (idle) */}
           {isUserTurn && (

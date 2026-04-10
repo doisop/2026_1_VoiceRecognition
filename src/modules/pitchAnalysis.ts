@@ -28,24 +28,29 @@ export interface PitchAnalysisResult {
 
 /**
  * Analyze a recorded utterance and optionally compare with reference audio.
+ * @param ref - 레퍼런스 오디오: 파일 경로(string), Blob(동적 TTS 생성), 또는 null
  */
 export async function analyzePitch(
   userBlob: Blob,
-  refAudioPath: string | null
+  ref: string | Blob | null
 ): Promise<PitchAnalysisResult> {
   const userAudio = await decodeToMono(userBlob)
   const contourUser = extractContour(userAudio.samples, userAudio.sampleRate)
 
   let contourRef: number[] | null = null
 
-  if (refAudioPath) {
+  if (ref) {
     try {
-      const res = await fetch(refAudioPath)
-      if (res.ok) {
-        const refBlob = await res.blob()
-        const refAudio = await decodeToMono(refBlob)
-        contourRef = extractContour(refAudio.samples, refAudio.sampleRate)
+      let refBlob: Blob
+      if (typeof ref === 'string') {
+        const res = await fetch(ref)
+        if (!res.ok) throw new Error(`fetch failed: ${res.status}`)
+        refBlob = await res.blob()
+      } else {
+        refBlob = ref
       }
+      const refAudio = await decodeToMono(refBlob)
+      contourRef = extractContour(refAudio.samples, refAudio.sampleRate)
     } catch {
       contourRef = null
     }
