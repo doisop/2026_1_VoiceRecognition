@@ -2,20 +2,23 @@
  * Pitch Analysis module
  *
  * Extracts F0 (fundamental frequency) pitch contour from recorded audio
- * using autocorrelation (frame-by-frame), then compares with a reference
- * contour to identify divergent intonation regions.
+ * using Pitchfinder (YIN), then compares with a reference contour to
+ * identify divergent intonation regions.
  *
  * Pipeline:
- *   AudioBlob → decode → mono PCM → frame-by-frame autocorrelation → F0 contour
+ *   AudioBlob → decode → mono PCM → frame-by-frame YIN → F0 contour
  *   (user contour + ref contour) → normalize → compare → divergent regions + feedback
  */
+
+import { YIN } from 'pitchfinder'
 
 const FRAME_SIZE = 2048
 const HOP_SIZE = 512
 const MIN_F0_HZ = 75    // lowest expected fundamental (bass voice)
 const MAX_F0_HZ = 500   // highest expected fundamental (high-pitched voice)
-const VOICED_THRESHOLD = 0.35  // minimum autocorrelation confidence to classify as voiced
 const DIVERGE_THRESHOLD = 1.2  // z-score difference to flag as divergent
+const YIN_THRESHOLD = 0.15
+const YIN_PROB_THRESHOLD = 0.1
 
 export interface PitchAnalysisResult {
   contourUser: number[]                  // F0 per frame (Hz); 0 = unvoiced
@@ -92,72 +95,29 @@ async function decodeToMono(blob: Blob): Promise<MonoAudio> {
 // ─── Pitch extraction ─────────────────────────────────────────────────────────
 
 function extractContour(samples: Float32Array, sampleRate: number): number[] {
-  const minPeriod = Math.floor(sampleRate / MAX_F0_HZ)
-  const maxPeriod = Math.floor(sampleRate / MIN_F0_HZ)
+  const detectPitch = YIN({
+    sampleRate,
+    threshold: YIN_THRESHOLD,
+    probabilityThreshold: YIN_PROB_THRESHOLD,
+  })
   const contour: number[] = []
 
   for (let start = 0; start + FRAME_SIZE <= samples.length; start += HOP_SIZE) {
     const frame = samples.slice(start, start + FRAME_SIZE)
-    contour.push(detectF0(frame, sampleRate, minPeriod, maxPeriod))
+    if (rmsEnergy(frame) < 0.005) {
+      contour.push(0)
+      continue
+    }
+    const windowed = applyHannWindow(frame)
+    const pitch = detectPitch(windowed)
+    if (!pitch || pitch < MIN_F0_HZ || pitch > MAX_F0_HZ) {
+      contour.push(0)
+    } else {
+      contour.push(pitch)
+    }
   }
 
   return contour
-}
-
-/**
- * Detect fundamental frequency of a single audio frame via autocorrelation.
- * Returns 0 for unvoiced frames.
- */
-function detectF0(
-  frame: Float32Array,
-  sampleRate: number,
-  minPeriod: number,
-  maxPeriod: number
-): number {
-  const n = frame.length
-
-  // Apply Hann window
-  const windowed = new Float32Array(n)
-  for (let i = 0; i < n; i++) {
-    windowed[i] = frame[i] * 0.5 * (1 - Math.cos((2 * Math.PI * i) / (n - 1)))
-  }
-
-  // RMS energy gate — skip near-silence
-  let rms = 0
-  for (let i = 0; i < n; i++) rms += windowed[i] * windowed[i]
-  rms = Math.sqrt(rms / n)
-  if (rms < 0.005) return 0
-
-  // Normalized autocorrelation
-  let r0 = 0
-  for (let i = 0; i < n; i++) r0 += windowed[i] * windowed[i]
-  if (r0 === 0) return 0
-
-  const acf = new Float32Array(maxPeriod + 1)
-  for (let lag = minPeriod; lag <= maxPeriod; lag++) {
-    let sum = 0
-    for (let i = 0; i < n - lag; i++) {
-      sum += windowed[i] * windowed[i + lag]
-    }
-    acf[lag] = sum / r0
-  }
-
-  // Find the best local peak in [minPeriod, maxPeriod]
-  let bestPeriod = 0
-  let bestVal = VOICED_THRESHOLD
-
-  for (let lag = minPeriod + 1; lag < maxPeriod; lag++) {
-    if (
-      acf[lag] > acf[lag - 1] &&
-      acf[lag] >= acf[lag + 1] &&
-      acf[lag] > bestVal
-    ) {
-      bestVal = acf[lag]
-      bestPeriod = lag
-    }
-  }
-
-  return bestPeriod > 0 ? sampleRate / bestPeriod : 0
 }
 
 // ─── Contour comparison ───────────────────────────────────────────────────────
@@ -248,4 +208,19 @@ function zScore(arr: number[]): number[] {
   const std = Math.sqrt(arr.reduce((s, v) => s + (v - mean) ** 2, 0) / arr.length)
   if (std < 1e-6) return arr.map(() => 0)
   return arr.map((v) => (v - mean) / std)
+}
+
+function applyHannWindow(frame: Float32Array): Float32Array {
+  const n = frame.length
+  const out = new Float32Array(n)
+  for (let i = 0; i < n; i++) {
+    out[i] = frame[i] * 0.5 * (1 - Math.cos((2 * Math.PI * i) / (n - 1)))
+  }
+  return out
+}
+
+function rmsEnergy(frame: Float32Array): number {
+  let sum = 0
+  for (let i = 0; i < frame.length; i++) sum += frame[i] * frame[i]
+  return Math.sqrt(sum / frame.length)
 }
