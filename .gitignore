@@ -38,3 +38,6 @@ $RECYCLE.BIN/
 # ─── Misc ─────────────────────────────────
 *.tmp
 *.bak
+
+# ─── Media assets ───────────────────────
+public/video/*.mp4
