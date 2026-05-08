@@ -31,9 +31,17 @@ export async function loadWhisper(onProgress?: ProgressCallback): Promise<void> 
   if (loadPromise) return loadPromise
 
   loadPromise = (async () => {
-    if (onProgress) onProgress(100)
-    isReady = true
-    console.log(`[STT] Modal STT 서버 사용: ${MODAL_STT_ENDPOINT}`)
+    const startedAt = performance.now()
+    console.log(`[STT] 모델 로딩 시작. 서버: ${MODAL_STT_ENDPOINT}`)
+    try {
+      if (onProgress) onProgress(100)
+      isReady = true
+      const latencyMs = Math.round(performance.now() - startedAt)
+      console.log(`[STT] 모델 로딩 완료 (${latencyMs}ms). 입력 수신 준비됨.`)
+    } catch (err) {
+      console.error('[STT] 모델 로딩 실패:', err)
+      throw err
+    }
   })()
 
   return loadPromise
@@ -41,6 +49,36 @@ export async function loadWhisper(onProgress?: ProgressCallback): Promise<void> 
 
 export function isWhisperLoaded(): boolean {
   return isReady
+}
+
+/** 100ms 무음 WAV Blob 생성 — Modal 서버 콜드 스타트 워밍업용 */
+function createSilentWav(): Blob {
+  const sampleRate = 16000
+  const numSamples = Math.floor(sampleRate * 0.1)  // 100ms
+  const dataSize = numSamples * 2  // 16-bit mono
+  const buf = new ArrayBuffer(44 + dataSize)
+  const v = new DataView(buf)
+  const str = (offset: number, s: string) => { for (let i = 0; i < s.length; i++) v.setUint8(offset + i, s.charCodeAt(i)) }
+  str(0, 'RIFF'); v.setUint32(4, 36 + dataSize, true); str(8, 'WAVE')
+  str(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true)
+  v.setUint16(22, 1, true); v.setUint32(24, sampleRate, true)
+  v.setUint32(28, sampleRate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true)
+  str(36, 'data'); v.setUint32(40, dataSize, true)
+  return new Blob([buf], { type: 'audio/wav' })
+}
+
+/** Modal STT 서버 콜드 스타트 방지용 워밍업 — 앱 로드 시 백그라운드에서 호출 */
+export async function warmUpSTT(): Promise<void> {
+  if (!isReady) return
+  const startedAt = performance.now()
+  console.log('[STT] 서버 워밍업 시작 (콜드 스타트 방지)...')
+  try {
+    await transcribeBlob(createSilentWav())
+    const ms = Math.round(performance.now() - startedAt)
+    console.log(`[STT] 서버 워밍업 완료 (${ms}ms). 이후 요청은 빠르게 처리됩니다.`)
+  } catch {
+    console.log('[STT] 서버 워밍업 완료 (오류 무시 — 서버가 깨어남).')
+  }
 }
 
 /** 녹음된 오디오 Blob을 Modal STT API로 전송해 전사 텍스트를 받는다. */

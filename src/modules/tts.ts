@@ -23,6 +23,14 @@ export type GoogleVoice =
   | 'ko-KR-Neural2-C'   // 남성 (표준)
   | 'ko-KR-Neural2-D'   // 남성 (깊음)
 
+// ─── Perf logging helper ──────────────────────────────────────────────────────
+
+function tts_ts(): string { return new Date().toISOString().slice(11, 23) }
+function ttsLog(segment: string, status: 'START' | 'END' | 'INFO', msg: string, ms?: number): void {
+  const msStr = ms !== undefined ? ` (소요시간: ${ms}ms)` : ''
+  console.log(`[${tts_ts()}] [${segment}] ${status} ${msg}${msStr}`)
+}
+
 // ─── Audio playback state ─────────────────────────────────────────────────────
 
 let audioCtx: AudioContext | null = null
@@ -95,22 +103,34 @@ function speakFallback(text: string, opts: TTSOptions): void {
 export function speak(text: string, options: TTSOptions = {}): void {
   stopSpeaking()
 
+  const ttsNetStart = performance.now()
+  ttsLog('TTS_NET', 'START', `Google TTS 네트워크 요청: "${text.slice(0, 25)}"`)
+
   fetchGoogleAudio(text, options)
-    .then((arrayBuffer) => getAudioCtx().decodeAudioData(arrayBuffer))
+    .then((arrayBuffer) => {
+      const ttsNetMs = Math.round(performance.now() - ttsNetStart)
+      ttsLog('TTS_NET', 'END', 'Google TTS 응답 수신 완료', ttsNetMs)
+      return getAudioCtx().decodeAudioData(arrayBuffer)
+    })
     .then(async (decoded) => {
       const ctx = getAudioCtx()
       await ctx.resume() // suspended 상태 해제 후 재생 — 앞부분 잘림 방지
       const source = ctx.createBufferSource()
       source.buffer = decoded
       source.connect(ctx.destination)
+
+      const ttsPlayStart = performance.now()
+
       source.onended = () => {
+        const ttsPlayMs = Math.round(performance.now() - ttsPlayStart)
+        ttsLog('TTS_PLAY', 'END', '오디오 재생 종료', ttsPlayMs)
         currentSource = null
         options.onEnd?.()
       }
       currentSource = source
       options.onStart?.()
       source.start(ctx.currentTime + 0.2) // 200ms 오프셋 — 하드웨어 초기화 대기
-      console.log('[TTS] Google Neural2 재생 시작:', text.slice(0, 20))
+      ttsLog('TTS_PLAY', 'START', `오디오 재생 시작: "${text.slice(0, 25)}"`)
     })
     .catch((err: Error) => {
       if (err.name === 'AbortError') return  // stopSpeaking()으로 의도적 취소
@@ -135,8 +155,13 @@ export function isSpeaking(): boolean {
 }
 
 export function initVoices(): void {
+  console.log('[TTS] 음성 목록 로딩 시작.')
   if (speechSynthesis.getVoices().length === 0) {
-    speechSynthesis.onvoiceschanged = () => {}
+    speechSynthesis.onvoiceschanged = () => {
+      console.log(`[TTS] 음성 목록 로딩 완료. ${speechSynthesis.getVoices().length}개 음성 준비됨.`)
+    }
+  } else {
+    console.log(`[TTS] 음성 목록 이미 로드됨 (${speechSynthesis.getVoices().length}개). 입력 수신 준비됨.`)
   }
 }
 
@@ -171,12 +196,21 @@ export async function synthesizeToBlob(
 
 /** 오디오 하드웨어를 미리 초기화. RoleplayScreen 진입 시 호출하면 첫 TTS 앞부분 잘림 방지. */
 export async function warmUpAudio(): Promise<void> {
-  const ctx = getAudioCtx()
-  await ctx.resume()
-  const buf = ctx.createBuffer(1, 5, ctx.sampleRate)
-  const src = ctx.createBufferSource()
-  src.buffer = buf
-  src.connect(ctx.destination)
-  src.start()
+  const startedAt = performance.now()
+  console.log('[TTS] 오디오 하드웨어 초기화 시작.')
+  try {
+    const ctx = getAudioCtx()
+    await ctx.resume()
+    const buf = ctx.createBuffer(1, 5, ctx.sampleRate)
+    const src = ctx.createBufferSource()
+    src.buffer = buf
+    src.connect(ctx.destination)
+    src.start()
+    const latencyMs = Math.round(performance.now() - startedAt)
+    console.log(`[TTS] 오디오 하드웨어 초기화 완료 (${latencyMs}ms). 입력 수신 준비됨.`)
+  } catch (err) {
+    console.error('[TTS] 오디오 하드웨어 초기화 실패:', err)
+    throw err
+  }
 }
 

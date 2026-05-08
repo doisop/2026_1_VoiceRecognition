@@ -7,6 +7,17 @@ export interface ScenarioStep {
   keywords: string[]
   referenceAudio: string
   isLast: boolean
+  modelUtterance?: string   // Step 2 발음 연습용 모범 발화 텍스트
+}
+
+export interface PronunciationPracticeResult {
+  overall_score: number
+  pronunciation_feedback: string  // 발음하는 방법 (된소리 vs 평음 등)
+  pitch_feedback: string          // 음의 높낮이
+  speed_feedback: string          // 말의 속도
+  // 추후 LLM 피드백 확장용 수치 데이터 (선택)
+  _scores?: { pronunciation: number; pitch: number; speed: number }
+  _raw?: { dtwDistance: number; pitchDivergentRatio: number; speedRatio: number }
 }
 
 export interface Scenario {

@@ -6,7 +6,7 @@
  * 요청/응답은 모두 콘솔에 로깅된다.
  */
 
-const GEMINI_MODEL = "gemini-2.5-pro";
+const GEMINI_MODEL = "gemini-2.5-flash";
 const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 
 const GEMINI_API_KEY = (import.meta as unknown as { env: Record<string, string | undefined> }).env.VITE_GEMINI_API_KEY
@@ -46,7 +46,7 @@ AI 발화: "${context.aiText}"
 
 다음 JSON 형식으로만 응답하세요 (다른 텍스트 없이):
 {
-  "expressionFeedback": "표현 적절성 피드백 1~2문장 (적절하면 칭찬, 아니면 더 자연스러운 표현 제안)",
+  "expressionFeedback": "표현 적절성 피드백 — 20자 이내 한 문장 (적절하면 짧은 칭찬, 아니면 핵심 개선 한 가지)",
   "intendedText": "발음 오류를 수정한 실제 의도 텍스트. 외국인 발음 실수로 STT가 잘못 전사된 경우 올바른 텍스트를 반환. 오류가 없으면 STT 텍스트 그대로 반환."
 }
 `.trim()

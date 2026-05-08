@@ -2,13 +2,23 @@ import { useState, useRef, useEffect } from 'react'
 import type { Scenario, FeedbackResult } from '../types'
 import { evaluateExpression } from '../modules/expressionEval'
 import { AudioRecorder } from '../modules/audio'
-import { loadWhisper, transcribeBlob, isWhisperLoaded } from '../modules/stt'
+import { transcribeBlob } from '../modules/stt'
 import { analyzeUtterance } from '../modules/llm'
 import { analyzePitch } from '../modules/pitchAnalysis'
 import { analyzePronunciation } from '../modules/pronunciationAnalysis'
-import { speak, stopSpeaking, initVoices, warmUpAudio, synthesizeToBlob } from '../modules/tts'
+import { speak, stopSpeaking, warmUpAudio, synthesizeToBlob } from '../modules/tts'
+import { practiceUtterances } from '../data/practiceUtterances'
 import AvatarCharacter, { type AvatarState } from './AvatarCharacter'
+import PracticeModal from './PracticeModal'
 import { Mic, MicOff, X } from 'lucide-react'
+
+// ─── 타이밍 측정 헬퍼 ─────────────────────────────────────────────────────────
+function perfTs(): string { return new Date().toISOString().slice(11, 23) }
+function perfLog(segment: string, status: 'START' | 'END' | 'INFO', msg: string, ms?: number): void {
+  const msStr = ms !== undefined ? ` (소요시간: ${ms}ms)` : ''
+  console.log(`[${perfTs()}] [${segment}] ${status} ${msg}${msStr}`)
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 interface Props {
   scenario: Scenario
@@ -35,6 +45,10 @@ export default function RoleplayScreen({ scenario, onFeedback, onBack }: Props) 
   const [avatarState, setAvatarState] = useState<AvatarState>('idle')
   const recorderRef = useRef<AudioRecorder | null>(null)
 
+  const [showPracticeModal, setShowPracticeModal] = useState(false)
+  const [practiceModelText, setPracticeModelText] = useState('')
+  const practiceResolveRef = useRef<(() => void) | null>(null)
+
   const scoresRef = useRef<number[]>([])
   const feedbackRef = useRef<string[]>([])
   const lastPitchRef = useRef<Omit<FeedbackResult, 'transcript' | 'expressionScore' | 'expressionFeedback'>>({
@@ -48,14 +62,7 @@ export default function RoleplayScreen({ scenario, onFeedback, onBack }: Props) 
   const progress = (stepIndex / scenario.steps.length) * 100
 
   useEffect(() => {
-    initVoices()
-    warmUpAudio().then(() => {
-      if (!isWhisperLoaded()) {
-        loadWhisper().then(() => speakStep(0))
-      } else {
-        speakStep(0)
-      }
-    })
+    warmUpAudio().then(() => speakStep(0))
     return () => stopSpeaking()
   }, [])
 
@@ -73,6 +80,24 @@ export default function RoleplayScreen({ scenario, onFeedback, onBack }: Props) 
     })
   }
 
+  // ── Step 2: 발음 연습 모달 ────────────────────────────────────────────────────
+
+  async function enterPracticeMode(modelText: string): Promise<void> {
+    setPracticeModelText(modelText)
+    setShowPracticeModal(true)
+    return new Promise<void>((resolve) => {
+      practiceResolveRef.current = resolve
+    })
+  }
+
+  function handlePracticeClose() {
+    setShowPracticeModal(false)
+    practiceResolveRef.current?.()
+    practiceResolveRef.current = null
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+
   async function startRecording() {
     if (stepState !== 'idle') return
     stopSpeaking()
@@ -85,11 +110,19 @@ export default function RoleplayScreen({ scenario, onFeedback, onBack }: Props) 
 
   async function stopRecording() {
     if (!recorderRef.current) return
+
+    const cycleStart = performance.now()
+    perfLog('CYCLE', 'START', '발화 처리 사이클 시작')
+
     setStepState('processing')
     setAvatarState('thinking')
     setDialogLine({ speaker: '나', text: '분석 중...' })
 
     const blob = await recorderRef.current.stop()
+
+    // ── STT ──────────────────────────────────────────────────────────────────────
+    const sttStart = performance.now()
+    perfLog('STT_INFER', 'START', 'STT 추론 시작 (Modal Whisper API 요청)')
 
     const [transcript, pitchResult] = await Promise.all([
       transcribeBlob(blob).catch(() => ''),
@@ -97,6 +130,9 @@ export default function RoleplayScreen({ scenario, onFeedback, onBack }: Props) 
         ? analyzePitch(blob, step.referenceAudio)
         : Promise.resolve({ contourUser: [] as number[], contourRef: null, feedback: '', divergentRegions: [] as [number, number][] }),
     ])
+
+    const sttMs = Math.round(performance.now() - sttStart)
+    perfLog('STT_INFER', 'END', `STT 추론 완료: "${transcript}"`, sttMs)
 
     const evalResult = evaluateExpression(transcript, step)
     scoresRef.current.push(evalResult.score)
@@ -109,14 +145,13 @@ export default function RoleplayScreen({ scenario, onFeedback, onBack }: Props) 
       pitchDivergentRegions: pitchResult.divergentRegions,
     }
 
-    // 사용자 발화 + 점수 대화창에 표시
     setDialogLine({
       speaker: '나',
       text: transcript || '(인식 실패)',
       score: evalResult.score,
     })
 
-    // ── LLM 분석: 표현 피드백 + 발음 의도 텍스트 (단일 API 호출) ──────────────
+    // ── LLM ──────────────────────────────────────────────────────────────────────
     const llmContext = {
       scenarioTitle: scenario.title,
       characterName: scenario.character.name,
@@ -125,6 +160,9 @@ export default function RoleplayScreen({ scenario, onFeedback, onBack }: Props) 
       targetExpressions: step.targetExpressions,
     }
 
+    const llmStart = performance.now()
+    perfLog('LLM_REQ', 'START', 'LLM 상황 적합성 판정 요청 (Gemini API)')
+
     const { expressionFeedback, intendedText } = transcript
       ? await analyzeUtterance(transcript, llmContext).catch((err) => {
           console.warn('[LLM] 분석 실패:', err)
@@ -132,44 +170,46 @@ export default function RoleplayScreen({ scenario, onFeedback, onBack }: Props) 
         })
       : { expressionFeedback: '', intendedText: '' }
 
-    // ── 발음 분석: 의도 텍스트와 STT가 다를 때 TTS 레퍼런스 생성 후 비교 ───────
+    const llmMs = Math.round(performance.now() - llmStart)
+    perfLog('LLM_REQ', 'END', `LLM 응답 수신. feedback: "${expressionFeedback.slice(0, 30)}"`, llmMs)
+
+    // ── 발음 분석 (의도 텍스트 ≠ STT) ──────────────────────────────────────────
     let pronFeedback = ''
     if (transcript && intendedText && intendedText !== transcript) {
-      console.log(`[발음] 의도 텍스트 감지: "${transcript}" → "${intendedText}"`)
+      perfLog('PRON', 'INFO', `발음 오류 감지: "${transcript}" → "${intendedText}"`)
 
-      // 텍스트 수준 음절 diff (빠른 피드백)
       const pronResult = analyzePronunciation(transcript, [intendedText])
       if (pronResult.hasError) {
         pronFeedback = pronResult.feedback
         feedbackRef.current.push(`[발음 피드백] ${pronFeedback}`)
       }
 
-      // TTS로 레퍼런스 오디오 생성 → 사용자 오디오와 피치 비교
+      // 피치 비교는 background — 메인 흐름 blocking 없음
       synthesizeToBlob(intendedText, scenario.voice as import('../modules/tts').GoogleVoice)
         .then((refBlob) => analyzePitch(blob, refBlob))
         .then((pitchCmp) => {
-          if (pitchCmp.feedback) {
-            feedbackRef.current.push(`[억양 피드백] ${pitchCmp.feedback}`)
-          }
+          if (pitchCmp.feedback) feedbackRef.current.push(`[억양 피드백] ${pitchCmp.feedback}`)
           lastPitchRef.current = {
             pitchContourUser: pitchCmp.contourUser,
             pitchContourRef: pitchCmp.contourRef ?? [],
             pitchFeedback: pitchCmp.feedback,
             pitchDivergentRegions: pitchCmp.divergentRegions,
           }
-          console.log('[발음] 피치 비교 완료:', pitchCmp.feedback)
         })
         .catch((err) => console.warn('[발음] 피치 비교 실패:', err))
     }
 
-    // ── 표현 + 발음 피드백을 대화창에 표시하고 TTS로 발화 ───────────────────────
+    // ── Step 1 TTS (LLM 피드백 발화) ─────────────────────────────────────────────
     if (expressionFeedback) {
       feedbackRef.current.push(`[표현 피드백] ${expressionFeedback}`)
     }
-
     const combinedFeedback = [expressionFeedback, pronFeedback].filter(Boolean).join(' ')
 
+    let step1TtsMs = 0
     if (combinedFeedback) {
+      const step1TtsStart = performance.now()
+      perfLog('STEP1_TTS', 'START', `Step1 피드백 TTS 요청: "${combinedFeedback.slice(0, 30)}"`)
+
       setAvatarState('talking')
       setDialogLine({
         speaker: scenario.character.name,
@@ -182,7 +222,44 @@ export default function RoleplayScreen({ scenario, onFeedback, onBack }: Props) 
           onEnd: resolve,
         })
       })
+      step1TtsMs = Math.round(performance.now() - step1TtsStart)
+      perfLog('STEP1_TTS', 'END', 'Step1 TTS 재생 완료 (네트워크+재생 합산)', step1TtsMs)
     }
+
+    // ── Step 2: "다음 문장을 읽고 따라 말해보세요" TTS + 모달 ─────────────────────
+    const practiceText = practiceUtterances[`${scenario.id}_${step.id}`]
+    let step2TtsMs = 0
+    let modalMs = 0
+
+    if (practiceText) {
+      const step2TtsStart = performance.now()
+      perfLog('STEP2_TTS', 'START', '"다음 문장을 읽고 따라 말해보세요" TTS 요청')
+      speak('다음 문장을 읽고 따라 말해보세요.', {
+        voice: scenario.voice as import('../modules/tts').GoogleVoice,
+        onEnd: () => {
+          step2TtsMs = Math.round(performance.now() - step2TtsStart)
+          perfLog('STEP2_TTS', 'END', 'Step2 안내 TTS 재생 완료', step2TtsMs)
+        },
+      })
+
+      const modalStart = performance.now()
+      perfLog('MODAL', 'START', 'Step2 모달 표시')
+      await enterPracticeMode(practiceText)
+      modalMs = Math.round(performance.now() - modalStart)
+      perfLog('MODAL', 'END', '모달 종료 (사용자 클릭)', modalMs)
+    }
+
+    // ── 사이클 요약 (모달 사용자 대기 시간 제외) ───────────────────────────────────
+    const totalExModal = Math.round(performance.now() - cycleStart) - modalMs
+    const otherMs = Math.max(0, totalExModal - sttMs - llmMs - step1TtsMs)
+    perfLog('SUMMARY', 'INFO', `=== 발화 사이클 요약 (시나리오: ${scenario.id}, step: ${step.id}) ===`)
+    console.log(`[SUMMARY] STT 추론:              ${String(sttMs).padStart(6)}ms`)
+    console.log(`[SUMMARY] LLM 판정:              ${String(llmMs).padStart(6)}ms`)
+    console.log(`[SUMMARY] Step1 TTS (합계):      ${String(step1TtsMs).padStart(6)}ms`)
+    console.log(`[SUMMARY] Step2 안내 TTS (비동기):${String(step2TtsMs).padStart(5)}ms`)
+    console.log(`[SUMMARY] 기타/전환:             ${String(otherMs).padStart(6)}ms`)
+    console.log(`[SUMMARY] ─────────────────────────`)
+    console.log(`[SUMMARY] 총 소요시간 (모달 제외): ${String(totalExModal).padStart(5)}ms`)
 
     if (step.isLast) {
       const avgScore = Math.round(
@@ -264,6 +341,16 @@ export default function RoleplayScreen({ scenario, onFeedback, onBack }: Props) 
            style={{ height: '72%', aspectRatio: '3/4' }}>
         <AvatarCharacter state={avatarState} className="w-full h-full" />
       </div>
+
+      {/* ── Step 2 발음 연습 모달 ── */}
+      {showPracticeModal && (
+        <PracticeModal
+          modelText={practiceModelText}
+          scenarioId={scenario.id}
+          stepId={step.id}
+          onClose={handlePracticeClose}
+        />
+      )}
 
       {/* ── VN Dialog box ── */}
       <div className="absolute bottom-0 left-0 right-0 z-20" style={{ height: '28%' }}>
