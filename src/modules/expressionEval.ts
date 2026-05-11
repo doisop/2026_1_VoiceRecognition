@@ -3,6 +3,7 @@ import type { ScenarioStep } from '../types'
 export interface EvalResult {
   score: number          // 0–100
   feedback: string[]
+  matchedExpressionIndex: number | null
 }
 
 /**
@@ -17,16 +18,18 @@ export function evaluateExpression(transcript: string, step: ScenarioStep): Eval
   const feedback: string[] = []
 
   // Exact match check
-  for (const expr of step.targetExpressions) {
+  for (let i = 0; i < step.targetExpressions.length; i++) {
+    const expr = step.targetExpressions[i]
     if (normalize(expr) === normalized) {
-      return { score: 100, feedback: [] }
+      return { score: 100, feedback: [], matchedExpressionIndex: i }
     }
   }
 
   // Close match (contains full target expression)
-  for (const expr of step.targetExpressions) {
+  for (let i = 0; i < step.targetExpressions.length; i++) {
+    const expr = step.targetExpressions[i]
     if (normalized.includes(normalize(expr))) {
-      return { score: 95, feedback: [] }
+      return { score: 95, feedback: [], matchedExpressionIndex: i }
     }
   }
 
@@ -36,7 +39,7 @@ export function evaluateExpression(transcript: string, step: ScenarioStep): Eval
 
   if (matchedKeywords.length === 0) {
     feedback.push(`핵심 표현을 다시 확인해 보세요: "${step.targetExpressions[0]}"`)
-    return { score: 20, feedback }
+    return { score: 20, feedback, matchedExpressionIndex: null }
   }
 
   const keywordScore = Math.min(80, Math.round((matchedKeywords.length / step.keywords.length) * 80))
@@ -46,7 +49,7 @@ export function evaluateExpression(transcript: string, step: ScenarioStep): Eval
   }
   feedback.push(`목표 표현 예시: "${step.targetExpressions[0]}"`)
 
-  return { score: keywordScore, feedback }
+  return { score: keywordScore, feedback, matchedExpressionIndex: null }
 }
 
 function normalize(text: string): string {

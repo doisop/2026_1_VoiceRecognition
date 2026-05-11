@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import type { Scenario, FeedbackResult, ScenarioStep } from '../types'
+import type { Scenario, FeedbackResult, ScenarioStep, StepFeedbackResult } from '../types'
 import { evaluateExpression } from '../modules/expressionEval'
 import { AudioRecorder } from '../modules/audio'
 import { loadWhisper, transcribeBlob, isWhisperLoaded } from '../modules/stt'
@@ -21,6 +21,7 @@ export default function RoleplayScreen({ scenario, onFeedback, onBack }: Props) 
   const [loadPct, setLoadPct] = useState(0)
   const [transcript, setTranscript] = useState('')
   const recorderRef = useRef<AudioRecorder | null>(null)
+  const stepResultsRef = useRef<StepFeedbackResult[]>([])
 
   const step: ScenarioStep = scenario.steps[stepIndex]
   const progress = (stepIndex / scenario.steps.length) * 100
@@ -49,28 +50,48 @@ export default function RoleplayScreen({ scenario, onFeedback, onBack }: Props) 
 
     const blob = await recorderRef.current.stop()
 
-    // Run STT and pitch analysis in parallel
-    const [sttResult, pitchResult] = await Promise.all([
-      transcribeBlob(blob).catch(() => ''),
-      analyzePitch(blob, step.referenceAudio),
-    ])
-
-    const text = sttResult
+    const text = await transcribeBlob(blob).catch(() => '')
     setTranscript(text)
 
-    const evalResult = evaluateExpression(text, step)
+    const finalEval = evaluateExpression(text, step)
+    const finalMatchedIndex = finalEval.matchedExpressionIndex
+    const targetAudios = step.targetExpressionAudio ?? []
+    const candidateRefAudios = [
+      ...(finalMatchedIndex !== null ? [targetAudios[finalMatchedIndex] ?? null] : []),
+      ...targetAudios,
+      step.referenceAudio,
+    ].filter((path): path is string => Boolean(path))
 
-    const result: FeedbackResult = {
+    const pitchResult = await analyzePitch(blob, candidateRefAudios)
+
+    const stepResult: StepFeedbackResult = {
+      stepId: step.id,
+      aiText: step.aiText,
       transcript: text,
-      expressionScore: evalResult.score,
-      expressionFeedback: evalResult.feedback,
+      expressionScore: finalEval.score,
+      expressionFeedback: finalEval.feedback,
       pitchContourUser: pitchResult.contourUser,
       pitchContourRef: pitchResult.contourRef ?? [],
       pitchFeedback: pitchResult.feedback,
       pitchDivergentRegions: pitchResult.divergentRegions,
     }
+    stepResultsRef.current = [...stepResultsRef.current, stepResult]
 
     if (step.isLast) {
+      const allStepResults = stepResultsRef.current
+      const avgExpressionScore = Math.round(
+        allStepResults.reduce((sum, item) => sum + item.expressionScore, 0) / allStepResults.length
+      )
+      const result: FeedbackResult = {
+        transcript: stepResult.transcript,
+        expressionScore: avgExpressionScore,
+        expressionFeedback: stepResult.expressionFeedback,
+        pitchContourUser: stepResult.pitchContourUser,
+        pitchContourRef: stepResult.pitchContourRef,
+        pitchFeedback: stepResult.pitchFeedback,
+        pitchDivergentRegions: stepResult.pitchDivergentRegions,
+        stepResults: allStepResults,
+      }
       onFeedback(result)
     } else {
       setTimeout(() => {
@@ -84,7 +105,9 @@ export default function RoleplayScreen({ scenario, onFeedback, onBack }: Props) 
   function handleChipClick(phrase: string) {
     if (stepState !== 'idle') return
     const evalResult = evaluateExpression(phrase, step)
-    const result: FeedbackResult = {
+    const stepResult: StepFeedbackResult = {
+      stepId: step.id,
+      aiText: step.aiText,
       transcript: phrase,
       expressionScore: evalResult.score,
       expressionFeedback: evalResult.feedback,
@@ -93,7 +116,22 @@ export default function RoleplayScreen({ scenario, onFeedback, onBack }: Props) 
       pitchFeedback: '힌트 선택 — 음조 분석 없음',
       pitchDivergentRegions: [],
     }
+    stepResultsRef.current = [...stepResultsRef.current, stepResult]
     if (step.isLast) {
+      const allStepResults = stepResultsRef.current
+      const avgExpressionScore = Math.round(
+        allStepResults.reduce((sum, item) => sum + item.expressionScore, 0) / allStepResults.length
+      )
+      const result: FeedbackResult = {
+        transcript: stepResult.transcript,
+        expressionScore: avgExpressionScore,
+        expressionFeedback: stepResult.expressionFeedback,
+        pitchContourUser: stepResult.pitchContourUser,
+        pitchContourRef: stepResult.pitchContourRef,
+        pitchFeedback: stepResult.pitchFeedback,
+        pitchDivergentRegions: stepResult.pitchDivergentRegions,
+        stepResults: allStepResults,
+      }
       onFeedback(result)
     } else {
       setTimeout(() => {

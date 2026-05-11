@@ -9,7 +9,16 @@ export class AudioRecorder {
   private chunks: Blob[] = []
 
   async start(): Promise<void> {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    // Disable browser-level audio processing that often suppresses the signal
+    // (especially noiseSuppression silences softer speech / steady tones,
+    // which destroys pitch information).
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false,
+      },
+    })
     this.chunks = []
     this.mediaRecorder = new MediaRecorder(stream)
 
