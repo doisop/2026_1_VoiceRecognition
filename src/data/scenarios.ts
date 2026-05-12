@@ -13,7 +13,7 @@ export const scenarios: Scenario[] = [
     steps: [
       {
         id: 0,
-        aiText: '어서 오세요. 오늘 어디가 불편해서 오셨나요?\n(머리와 목이 아픈 상황)',
+        aiText: '어서 오세요. 오늘 어디가 불편해서 오셨나요?',
         targetExpressions: ['머리가 아파요', '두통이 있어요', '머리가 너무 아파요'],
         keywords: ['머리', '아파', '두통'],
         referenceAudio: '/audio/hospital_0_ref.wav',
@@ -73,7 +73,7 @@ export const scenarios: Scenario[] = [
       },
       {
         id: 2,
-        aiText: '다 됐어요. 감사합니다. 카드는 언제쯤 받을 수 있어요?',
+        aiText: '그럼 혜택이 많은 걸로 만들어 드릴게요. 비밀번호 네 자리 설정해 주세요.',
         targetExpressions: ['아니요, 괜찮아요', '감사합니다', '네, 됐어요'],
         keywords: ['아니요', '괜찮', '감사', '됐어요'],
         referenceAudio: '/audio/bank_2_ref.wav',
