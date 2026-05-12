@@ -385,7 +385,7 @@ export default function RoleplayScreen({ scenario, onFeedback, onBack }: Props) 
           </div>
 
           {/* Dialog text */}
-          <p className="text-white text-sm leading-relaxed flex-1">
+          <p className="text-white text-lg leading-relaxed flex-1 whitespace-pre-wrap">
             {dialogLine.text}
           </p>
 
