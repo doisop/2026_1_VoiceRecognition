@@ -90,7 +90,7 @@ export default function PracticeModal({ modelText, scenarioId, stepId, onClose }
               </button>
               <button
                 onClick={onClose}
-                className="flex-1 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold transition-colors"
+                className="flex-1 py-2.5 rounded-xl bg-[#1B34B8] hover:bg-[#1B34B8]/90 text-white text-sm font-semibold transition-colors"
               >
                 다음으로
               </button>
@@ -128,7 +128,7 @@ export default function PracticeModal({ modelText, scenarioId, stepId, onClose }
                 className={`flex-1 py-2.5 rounded-xl text-white text-sm font-semibold flex items-center justify-center gap-2 transition-colors disabled:opacity-30 ${
                   modalState === 'recording'
                     ? 'bg-red-500 hover:bg-red-400 animate-pulse'
-                    : 'bg-indigo-600 hover:bg-indigo-500'
+                    : 'bg-[#1B34B8] hover:bg-[#1B34B8]/90'
                 }`}
               >
                 {modalState === 'recording' ? (

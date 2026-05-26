@@ -360,7 +360,7 @@ export default function RoleplayScreen({ scenario, onFeedback, onBack }: Props) 
           <div className="flex items-center gap-3">
             <span className={`text-sm font-bold px-3 py-0.5 rounded ${
               dialogLine.speaker === '나'
-                ? 'bg-indigo-600/80 text-white'
+                ? 'bg-[#1B34B8]/80 text-white'
                 : 'bg-white/15 text-white'
             }`}>
               {dialogLine.speaker}
@@ -378,7 +378,7 @@ export default function RoleplayScreen({ scenario, onFeedback, onBack }: Props) 
 
             <div className={`w-1.5 h-1.5 rounded-full ml-auto ${
               stepState === 'recording'  ? 'bg-red-400 animate-pulse' :
-              stepState === 'speaking'   ? 'bg-indigo-400 animate-pulse' :
+              stepState === 'speaking'   ? 'bg-[#1B34B8]/70 animate-pulse' :
               stepState === 'processing' ? 'bg-amber-400 animate-pulse' :
               'bg-green-400'
             }`} />
@@ -412,7 +412,7 @@ export default function RoleplayScreen({ scenario, onFeedback, onBack }: Props) 
               </div>
               <button
                 onClick={startRecording}
-                className="w-11 h-11 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white flex items-center justify-center shadow-lg transition-colors flex-shrink-0"
+                className="w-11 h-11 rounded-full bg-[#1B34B8] hover:bg-[#1B34B8]/90 text-white flex items-center justify-center shadow-lg transition-colors flex-shrink-0"
               >
                 <Mic className="w-5 h-5" />
               </button>
