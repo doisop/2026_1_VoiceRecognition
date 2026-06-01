@@ -27,7 +27,7 @@ export default function PracticeModal({ modelText, scenarioId, stepId, onClose }
       setModalState('processing')
       const blob = await recorderRef.current!.stop()
 
-      const analysisResult = await analyzePronunciationPractice(blob, scenarioId, stepId)
+      const analysisResult = await analyzePronunciationPractice(blob, scenarioId, stepId, modelText)
 
       setResult(analysisResult)
       setModalState('result')
