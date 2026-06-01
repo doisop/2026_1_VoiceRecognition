@@ -138,6 +138,12 @@ export default function RoleplayScreen({ scenario, onFeedback, onBack }: Props) 
     scoresRef.current.push(evalResult.score)
     feedbackRef.current.push(...evalResult.feedback)
 
+    console.log('[EXPR] ── 표현 분석 결과 ──────────────────────')
+    console.log('[EXPR] STT transcript    :', transcript || '(없음)')
+    console.log('[EXPR] targetExpressions :', step.targetExpressions)
+    console.log('[EXPR] eval.score        :', evalResult.score)
+    console.log('[EXPR] eval.feedback     :', evalResult.feedback)
+
     lastPitchRef.current = {
       pitchContourUser: pitchResult.contourUser,
       pitchContourRef: pitchResult.contourRef ?? [],
@@ -160,6 +166,8 @@ export default function RoleplayScreen({ scenario, onFeedback, onBack }: Props) 
       targetExpressions: step.targetExpressions,
     }
 
+    console.log('[EXPR] LLM 요청 context  :', llmContext)
+
     const llmStart = performance.now()
     perfLog('LLM_REQ', 'START', 'LLM 상황 적합성 판정 요청 (Gemini API)')
 
@@ -173,12 +181,16 @@ export default function RoleplayScreen({ scenario, onFeedback, onBack }: Props) 
     const llmMs = Math.round(performance.now() - llmStart)
     perfLog('LLM_REQ', 'END', `LLM 응답 수신. feedback: "${expressionFeedback.slice(0, 30)}"`, llmMs)
 
+    console.log('[EXPR] LLM expressionFeedback:', expressionFeedback || '(빈 문자열)')
+    console.log('[EXPR] LLM intendedText      :', intendedText)
+
     // ── 발음 분석 (의도 텍스트 ≠ STT) ──────────────────────────────────────────
     let pronFeedback = ''
     if (transcript && intendedText && intendedText !== transcript) {
       perfLog('PRON', 'INFO', `발음 오류 감지: "${transcript}" → "${intendedText}"`)
 
       const pronResult = analyzePronunciation(transcript, [intendedText])
+      console.log('[EXPR] 발음 분석 결과      :', pronResult)
       if (pronResult.hasError) {
         pronFeedback = pronResult.feedback
         feedbackRef.current.push(`[발음 피드백] ${pronFeedback}`)
@@ -197,6 +209,8 @@ export default function RoleplayScreen({ scenario, onFeedback, onBack }: Props) 
           }
         })
         .catch((err) => console.warn('[발음] 피치 비교 실패:', err))
+    } else {
+      console.log('[EXPR] 발음 분석 스킵 — transcript === intendedText 또는 transcript 없음')
     }
 
     // ── Step 1 TTS (LLM 피드백 발화) ─────────────────────────────────────────────
@@ -204,6 +218,8 @@ export default function RoleplayScreen({ scenario, onFeedback, onBack }: Props) 
       feedbackRef.current.push(`[표현 피드백] ${expressionFeedback}`)
     }
     const combinedFeedback = [expressionFeedback, pronFeedback].filter(Boolean).join(' ')
+    console.log('[EXPR] combinedFeedback  :', combinedFeedback || '(빈 문자열 — TTS 스킵됨)')
+    console.log('[EXPR] ───────────────────────────────────────')
 
     let step1TtsMs = 0
     if (combinedFeedback) {

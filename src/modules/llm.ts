@@ -12,6 +12,8 @@ const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models
 const GEMINI_API_KEY = (import.meta as unknown as { env: Record<string, string | undefined> }).env.VITE_GEMINI_API_KEY
 
 const REQUEST_TIMEOUT_MS = 60_000
+const MAX_RETRIES = 3
+const RETRY_DELAY_MS = 1000
 
 export type LLMContext = {
   scenarioTitle: string       // e.g. "병원"
@@ -56,43 +58,55 @@ AI 발화: "${context.aiText}"
 
   console.log('[LLM] 발화 분석 요청 →', { transcript, scenarioTitle: context.scenarioTitle })
 
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
 
-  try {
-    const startedAt = performance.now()
+    try {
+      const startedAt = performance.now()
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    })
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      })
 
-    const rawText = await response.text()
-    const latencyMs = Math.round(performance.now() - startedAt)
+      const rawText = await response.text()
+      const latencyMs = Math.round(performance.now() - startedAt)
 
-    console.log(`[LLM] 응답 (${response.status}, ${latencyMs}ms)`)
+      console.log(`[LLM] 응답 (${response.status}, ${latencyMs}ms, 시도 ${attempt}/${MAX_RETRIES})`)
 
-    if (!response.ok) {
-      throw new Error(`Gemini API request failed (${response.status}): ${rawText.slice(0, 300)}`)
+      if (response.status === 503) {
+        if (attempt < MAX_RETRIES) {
+          console.warn(`[LLM] 503 과부하 — ${RETRY_DELAY_MS * attempt}ms 후 재시도 (${attempt}/${MAX_RETRIES})`)
+          await new Promise((r) => setTimeout(r, RETRY_DELAY_MS * attempt))
+          continue
+        }
+        throw new Error(`Gemini API request failed (503): ${rawText.slice(0, 300)}`)
+      }
+
+      if (!response.ok) {
+        throw new Error(`Gemini API request failed (${response.status}): ${rawText.slice(0, 300)}`)
+      }
+
+      const data = JSON.parse(rawText)
+      const text: string = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+
+      const jsonMatch = text.match(/\{[\s\S]*\}/)
+      if (!jsonMatch) {
+        return { expressionFeedback: text.trim(), intendedText: transcript }
+      }
+
+      const parsed = JSON.parse(jsonMatch[0]) as Partial<UtteranceAnalysis>
+      return {
+        expressionFeedback: parsed.expressionFeedback ?? '',
+        intendedText: parsed.intendedText ?? transcript,
+      }
+    } finally {
+      clearTimeout(timeout)
     }
-
-    const data = JSON.parse(rawText)
-    const text: string = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
-
-    // JSON 파싱 (Gemini가 마크다운 코드블록으로 감쌀 수 있으므로 정규식으로 추출)
-    const jsonMatch = text.match(/\{[\s\S]*\}/)
-    if (!jsonMatch) {
-      return { expressionFeedback: text.trim(), intendedText: transcript }
-    }
-
-    const parsed = JSON.parse(jsonMatch[0]) as Partial<UtteranceAnalysis>
-    return {
-      expressionFeedback: parsed.expressionFeedback ?? '',
-      intendedText: parsed.intendedText ?? transcript,
-    }
-  } finally {
-    clearTimeout(timeout)
   }
+
+  throw new Error('Gemini API: 최대 재시도 횟수 초과')
 }

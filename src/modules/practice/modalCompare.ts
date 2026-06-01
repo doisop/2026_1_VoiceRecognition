@@ -37,6 +37,13 @@ interface AlignmentSpan {
   end_sec: number
 }
 
+interface UserFeedback {
+  summary?: string
+  diagnosis?: string[]
+  coaching?: string[]
+  targeted_tips?: string[]
+}
+
 interface CompareResponse {
   overall_score: number
   analyzers: {
@@ -45,11 +52,14 @@ interface CompareResponse {
     pitch: AnalyzerBlock
     energy: AnalyzerBlock
     vot: AnalyzerBlock
+    coda?: AnalyzerBlock        // 받침 분석기 (서버 신버전)
   }
   alignment: {
     gt: AlignmentSpan[]
     sample: AlignmentSpan[]
   }
+  feedback?: UserFeedback
+  input_text?: string
 }
 
 const REF_CACHE = new Map<string, Blob>()
@@ -135,16 +145,26 @@ function speedRatioToScore(ratio: number): number {
   return toPercent(1 - Math.max(0, (deviation - 0.05) / 0.65))
 }
 
-/** 발음 방법 카테고리 — 4개 분석기 가중 평균. */
+/** 발음 방법 카테고리 — 분석기 가중 평균 (coda 있으면 포함). */
 function aggregatePronunciationScore(resp: CompareResponse): number {
   const a = resp.analyzers
-  // formants(모음 품질) + mfcc_dtw(전반 스펙트럼) 위주, vot/energy는 보조
-  const weighted =
+  // formants(모음 품질) + mfcc_dtw(전반 스펙트럼) 위주, vot/energy/coda는 보조
+  const hasCoda = a.coda != null
+  if (hasCoda) {
+    return toPercent(
+      a.formants.score * 0.30 +
+        a.mfcc_dtw.score * 0.30 +
+        a.vot.score * 0.13 +
+        a.energy.score * 0.12 +
+        (a.coda?.score ?? 0) * 0.15,
+    )
+  }
+  return toPercent(
     a.formants.score * 0.35 +
-    a.mfcc_dtw.score * 0.35 +
-    a.vot.score * 0.15 +
-    a.energy.score * 0.15
-  return toPercent(weighted)
+      a.mfcc_dtw.score * 0.35 +
+      a.vot.score * 0.15 +
+      a.energy.score * 0.15,
+  )
 }
 
 /** per_syllable 중 점수 가장 낮은 N개 char 추출. */
@@ -253,6 +273,113 @@ function buildSpeedFeedback(speedRatio: number, score: number): string {
   return '말의 속도가 정답과 비슷합니다.'
 }
 
+// ── 러시아어 피드백 ────────────────────────────────────────────────────────────
+
+function buildPronunciationFeedbackRu(resp: CompareResponse): string {
+  const a = resp.analyzers
+  const score = aggregatePronunciationScore(resp)
+
+  const subs: Array<{ label: string; tip: string; block: AnalyzerBlock }> = [
+    {
+      label: 'гласных звуков',
+      tip: 'Произносите гласные чётче, придавая губам более выраженную форму.',
+      block: a.formants,
+    },
+    {
+      label: 'общего произношения',
+      tip: 'Прослушайте образец медленно и повторите в точности.',
+      block: a.mfcc_dtw,
+    },
+    {
+      label: 'согласных (твёрдых/придыхательных)',
+      tip: 'Твёрдые (ㄲ, ㅃ, ㅉ) произносите с напором, придыхательные (ㅋ, ㅍ, ㅊ) — с выдохом.',
+      block: a.vot,
+    },
+    {
+      label: 'ударения',
+      tip: 'Согласуйте силу ударения в предложении с образцом.',
+      block: a.energy,
+    },
+  ]
+
+  const weakest = subs.reduce((m, s) => (s.block.score < m.block.score ? s : m), subs[0])
+
+  if (score >= 85) return 'Произношение звучит очень естественно. Отлично!'
+
+  const bad = worstSyllables(weakest.block.per_syllable, 3, 0.5)
+  const focusPhrase =
+    bad.length > 0
+      ? `Обратите особое внимание на ${weakest.label} в слогах '${bad.join("', '")}'.`
+      : `Уделите больше внимания ${weakest.label}.`
+
+  if (score >= 65) return `Произношение в целом естественное. ${focusPhrase} ${weakest.tip}`
+  return `Произношению нужна дополнительная работа. ${focusPhrase} ${weakest.tip}`
+}
+
+function buildPitchFeedbackRu(resp: CompareResponse): string {
+  const pitch = resp.analyzers.pitch
+  const score = toPercent(pitch.score)
+  const d = pitch.details as {
+    gt_median_hz?: number | null
+    sample_median_hz?: number | null
+    gt_tail_slope_st_per_sec?: number | null
+    sample_tail_slope_st_per_sec?: number | null
+  }
+
+  if (score >= 85) return 'Высота тона хорошо совпадает с образцом!'
+
+  const gtSlope = d.gt_tail_slope_st_per_sec
+  const smSlope = d.sample_tail_slope_st_per_sec
+  if (gtSlope != null && smSlope != null && Math.abs(smSlope - gtSlope) > 4) {
+    if (gtSlope < -2 && smSlope > gtSlope + 4)
+      return 'Попробуйте понижать голос в конце предложения — по сравнению с образцом вы поднимаете его слишком высоко.'
+    if (gtSlope > 2 && smSlope < gtSlope - 4)
+      return 'Попробуйте повышать голос в конце предложения — по сравнению с образцом вы опускаете его слишком низко.'
+  }
+
+  const gtMed = d.gt_median_hz
+  const smMed = d.sample_median_hz
+  if (gtMed && smMed) {
+    const ratio = smMed / gtMed
+    if (ratio > 1.15) return 'В целом вы говорите слишком высоко. Попробуйте понизить тон, чтобы он был похож на образец.'
+    if (ratio < 0.87) return 'В целом вы говорите слишком низко. Попробуйте повысить тон, чтобы он был похож на образец.'
+  }
+
+  if (score >= 65) return 'Высота тона в целом естественная. Ещё раз прослушайте интонацию образца.'
+  return 'Высота тона заметно отличается от образца. Попробуйте подражать интонации образца.'
+}
+
+function buildSpeedFeedbackRu(speedRatio: number, score: number): string {
+  if (score >= 85) return 'Темп речи естественный!'
+  if (speedRatio > 1.3) return 'Вы говорите слишком быстро. Произносите слова медленнее и чётче.'
+  if (speedRatio > 1.15) return 'Вы говорите немного быстро. Ориентируйтесь на образец и говорите медленнее.'
+  if (speedRatio < 0.7) return 'Вы говорите слишком медленно. Постарайтесь говорить немного быстрее и естественнее.'
+  if (speedRatio < 0.85) return 'Вы говорите немного медленно. Постарайтесь говорить так же естественно, как в образце.'
+  return 'Ваш темп речи близок к образцу.'
+}
+
+/** 6개 분석기 per_syllable 중 최하점이 threshold 미만이면 교정 필요 음절로 분류한다. */
+function computeBadChars(resp: CompareResponse, threshold = 0.20): string[] {
+  const a = resp.analyzers
+  const blocks = [a.formants, a.mfcc_dtw, a.pitch, a.energy, a.vot, a.coda].filter(
+    (b): b is AnalyzerBlock => b != null && b.per_syllable.length > 0,
+  )
+  if (blocks.length === 0) return []
+
+  const numSyllables = blocks[0].per_syllable.length
+  const bad: string[] = []
+
+  for (let i = 0; i < numSyllables; i++) {
+    const scores = blocks
+      .filter((b) => b.per_syllable[i] !== undefined)
+      .map((b) => b.per_syllable[i].score)
+    if (scores.length === 0) continue
+    const min = Math.min(...scores)
+    if (min < threshold) bad.push(blocks[0].per_syllable[i].char)
+  }
+  return bad
+}
+
 /** 종합점수 — 발음(50%) + 음높이(30%) + 속도(20%). */
 function aggregateOverall(pron: number, pitch: number, speed: number): number {
   return Math.round(pron * 0.5 + pitch * 0.3 + speed * 0.2)
@@ -269,6 +396,14 @@ function buildResultFromResponse(resp: CompareResponse): PronunciationPracticeRe
     pronunciation_feedback: buildPronunciationFeedback(resp),
     pitch_feedback: buildPitchFeedback(resp),
     speed_feedback: buildSpeedFeedback(speedRatio, speedScore),
+    feedback_ru: {
+      pronunciation: buildPronunciationFeedbackRu(resp),
+      pitch: buildPitchFeedbackRu(resp),
+      speed: buildSpeedFeedbackRu(speedRatio, speedScore),
+    },
+    bad_chars: computeBadChars(resp),
+    targeted_tips: resp.feedback?.targeted_tips ?? [],
+    source_text: resp.input_text ?? '',
     _scores: {
       pronunciation: pronScore,
       pitch: pitchScore,

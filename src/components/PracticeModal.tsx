@@ -1,8 +1,9 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import type { PronunciationPracticeResult } from '../types'
 import { AudioRecorder } from '../modules/audio'
 import { analyzePronunciationPractice } from '../modules/pronunciationAnalysis'
-import { Mic, MicOff } from 'lucide-react'
+import { Mic, MicOff, Volume2, Square } from 'lucide-react'
+
 
 interface Props {
   modelText: string
@@ -16,7 +17,54 @@ type ModalState = 'prompt' | 'recording' | 'processing' | 'result'
 export default function PracticeModal({ modelText, scenarioId, stepId, onClose }: Props) {
   const [modalState, setModalState] = useState<ModalState>('prompt')
   const [result, setResult] = useState<PronunciationPracticeResult | null>(null)
+  const [lang, setLang] = useState<'ko' | 'ru'>('ko')
+  const [playingId, setPlayingId] = useState<string | null>(null)
   const recorderRef = useRef<AudioRecorder | null>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+
+  useEffect(() => () => { stopAll() }, [])
+
+  function stopAll() {
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current = null
+    }
+    window.speechSynthesis.cancel()
+    setPlayingId(null)
+  }
+
+  function playRef() {
+    stopAll()
+    const audio = new Audio(`/audio/practice/${scenarioId}_${stepId}_ref.wav`)
+    audio.volume = 1.0
+    audioRef.current = audio
+    setPlayingId('ref')
+    audio.onended = () => setPlayingId(null)
+    audio.play()
+  }
+
+  function playTTS(id: string, text: string) {
+    stopAll()
+    const utter = new SpeechSynthesisUtterance(text)
+    utter.lang = lang === 'ko' ? 'ko-KR' : 'ru-RU'
+    setPlayingId(id)
+    utter.onend = () => setPlayingId(null)
+    window.speechSynthesis.speak(utter)
+  }
+
+  function PlayBtn({ id, onPlay }: { id: string; onPlay: () => void }) {
+    const active = playingId === id
+    return (
+      <button
+        onClick={() => active ? stopAll() : onPlay()}
+        className="p-1.5 rounded-full hover:bg-white/10 transition-colors flex-shrink-0"
+      >
+        {active
+          ? <Square className="w-3.5 h-3.5 text-rose-400 fill-rose-400" />
+          : <Volume2 className="w-3.5 h-3.5 text-white/40" />}
+      </button>
+    )
+  }
 
   async function handleToggleRecording() {
     if (modalState === 'prompt') {
@@ -68,16 +116,64 @@ export default function PracticeModal({ modelText, scenarioId, stepId, onClose }
 
             {/* 피드백 섹션 */}
             <div className="flex-1 overflow-y-auto px-6 py-4 flex flex-col gap-4">
-              {[
-                { label: '발음하는 방법', text: result.pronunciation_feedback },
-                { label: '음의 높낮이', text: result.pitch_feedback },
-                { label: '말의 속도', text: result.speed_feedback },
-              ].map(({ label, text }) => (
-                <div key={label} className="bg-white/5 rounded-xl p-4">
-                  <p className="text-white/50 text-xs mb-1.5">📌 {label}</p>
-                  <p className="text-white text-sm leading-relaxed">{text}</p>
+              {/* 목표 문장 + WAV 플레이 버튼 */}
+              {(() => {
+                const badChars = new Set(result.bad_chars ?? [])
+                return (
+                  <div className="flex items-center gap-2 py-2">
+                    <p className="flex-1 text-xl font-bold tracking-wide leading-relaxed text-center">
+                      {[...modelText].map((ch, i) =>
+                        badChars.has(ch)
+                          ? <span key={i} className="text-rose-400">{ch}</span>
+                          : <span key={i} className="text-white">{ch}</span>
+                      )}
+                    </p>
+                    <PlayBtn id="ref" onPlay={playRef} />
+                  </div>
+                )
+              })()}
+
+              {/* 언어 토글 */}
+              <div className="flex justify-center">
+                <div className="flex bg-white/10 rounded-lg p-0.5 gap-0.5">
+                  {(['ko', 'ru'] as const).map((l) => (
+                    <button
+                      key={l}
+                      onClick={() => { stopAll(); setLang(l) }}
+                      className={`px-4 py-1.5 rounded-md text-xs font-semibold transition-colors ${
+                        lang === l ? 'bg-white text-gray-900' : 'text-white/60 hover:text-white'
+                      }`}
+                    >
+                      {l === 'ko' ? '한국어' : 'Русский'}
+                    </button>
+                  ))}
                 </div>
-              ))}
+              </div>
+
+              {(() => {
+                const ru = result.feedback_ru
+                const items =
+                  lang === 'ko'
+                    ? [
+                        { id: 'pron',  label: '발음하는 방법', text: result.pronunciation_feedback },
+                        { id: 'pitch', label: '음의 높낮이',   text: result.pitch_feedback },
+                        { id: 'speed', label: '말의 속도',     text: result.speed_feedback },
+                      ]
+                    : [
+                        { id: 'pron',  label: 'Произношение', text: ru?.pronunciation ?? result.pronunciation_feedback },
+                        { id: 'pitch', label: 'Высота тона',  text: ru?.pitch ?? result.pitch_feedback },
+                        { id: 'speed', label: 'Темп речи',    text: ru?.speed ?? result.speed_feedback },
+                      ]
+                return items.map(({ id, label, text }) => (
+                  <div key={id} className="bg-white/5 rounded-xl p-4">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <p className="text-white/50 text-xs">📌 {label}</p>
+                      <PlayBtn id={id} onPlay={() => playTTS(id, text)} />
+                    </div>
+                    <p className="text-white text-sm leading-relaxed">{text}</p>
+                  </div>
+                ))
+              })()}
             </div>
 
             {/* 하단 버튼 */}
