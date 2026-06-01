@@ -1,16 +1,8 @@
-import { MapPin, ChevronRight, Mic } from 'lucide-react'
 import type { Scenario } from '../types'
 import { scenarios } from '../data/scenarios'
-import { Badge } from '@/components/ui/badge'
 
 interface Props {
   onSelect: (sc: Scenario) => void
-}
-
-const difficultyVariant: Record<string, 'emerald' | 'amber' | 'rose'> = {
-  '초급': 'emerald',
-  '중급': 'amber',
-  '고급': 'rose',
 }
 
 const difficultyRu: Record<string, string> = {
@@ -19,29 +11,48 @@ const difficultyRu: Record<string, string> = {
   '고급': 'Высший',
 }
 
+const scenarioAccent: Record<string, string> = {
+  hospital:   '#C73B28',
+  bank:       '#1B34B8',
+  government: '#1B6B4A',
+}
+
+const serifFont = { fontFamily: "'Noto Serif KR', serif" }
+
 export default function HomeScreen({ onSelect }: Props) {
   return (
     <div className="min-h-screen bg-background">
 
-      {/* ── Hero header ──────────────────────────────────────── */}
-      <div className="relative overflow-hidden border-b border-border">
-        <div className="absolute inset-0 bg-gradient-to-br from-indigo-950 via-background to-background" />
-        <div className="relative px-6 pt-12 pb-10 max-w-5xl mx-auto">
-          <div className="flex items-center gap-2 mb-4">
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-              <Mic className="w-4 h-4 text-white" />
-            </div>
-            <span className="text-xs font-bold tracking-widest text-primary uppercase">
-              알이랑 우리랑
-            </span>
-          </div>
-          <h1 className="text-4xl font-extrabold text-foreground leading-tight">
-            한국어 발음 연습
+      {/* ── Hero ─────────────────────────────────────────────── */}
+      <div className="relative overflow-hidden px-6 pt-12 pb-10 max-w-5xl mx-auto">
+        <div
+          className="absolute right-0 top-0 select-none pointer-events-none leading-none"
+          style={{ fontSize: '22rem', opacity: 0.03, ...serifFont }}
+          aria-hidden
+        >
+          語
+        </div>
+
+        <div className="relative">
+          <p
+            className="text-xs font-bold tracking-[0.2em] uppercase mb-6"
+            style={{ color: '#1B34B8' }}
+          >
+            알이랑 우리랑
+          </p>
+          <h1
+            className="text-5xl sm:text-6xl font-bold text-foreground leading-tight"
+            style={serifFont}
+          >
+            한국어
+            <br />
+            발음 연습
           </h1>
-          <p className="text-muted-foreground mt-1 text-base">
+          <div className="w-12 h-0.5 my-5" style={{ backgroundColor: '#1B34B8' }} />
+          <p className="text-base text-muted-foreground italic">
             Тренировка произношения корейского языка
           </p>
-          <p className="text-muted-foreground/70 text-sm mt-3 max-w-lg leading-relaxed">
+          <p className="text-sm mt-3 max-w-md leading-relaxed text-muted-foreground/75">
             실생활 속 핵심 상황을 롤플레잉으로 연습하고,
             발음과 음조에 대한 시각적 피드백을 받아보세요.
           </p>
@@ -49,17 +60,14 @@ export default function HomeScreen({ onSelect }: Props) {
       </div>
 
       {/* ── Scenario grid ────────────────────────────────────── */}
-      <div className="max-w-5xl mx-auto px-6 py-8">
-        <div className="flex items-center justify-between mb-5">
-          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-widest">
-            상황 선택 · Выбор ситуации
-          </h2>
-          <span className="text-xs text-muted-foreground">{scenarios.length}개 시나리오</span>
-        </div>
+      <div className="max-w-5xl mx-auto px-6 pb-12">
+        <p className="text-xs tracking-[0.18em] uppercase text-muted-foreground mb-5">
+          상황 선택 · Выбор ситуации
+        </p>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {scenarios.map((sc) => (
-            <ScenarioCard key={sc.id} scenario={sc} onSelect={onSelect} />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          {scenarios.map((sc, i) => (
+            <ScenarioCard key={sc.id} scenario={sc} index={i} onSelect={onSelect} />
           ))}
         </div>
       </div>
@@ -69,56 +77,69 @@ export default function HomeScreen({ onSelect }: Props) {
 
 function ScenarioCard({
   scenario: sc,
+  index,
   onSelect,
 }: {
   scenario: Scenario
+  index: number
   onSelect: (sc: Scenario) => void
 }) {
+  const accent = scenarioAccent[sc.id] ?? '#C84B31'
+  const num = String(index + 1).padStart(2, '0')
+
   return (
     <button
       onClick={() => onSelect(sc)}
-      className="group text-left rounded-2xl overflow-hidden border border-border bg-card hover:border-primary/50 transition-all duration-300 hover:shadow-lg hover:shadow-primary/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="group text-left overflow-hidden border border-border bg-card transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-black/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      style={{ borderTopColor: accent, borderTopWidth: '4px' }}
     >
-      {/* Image area */}
-      <div className="relative h-44 overflow-hidden">
+      {/* Top meta strip */}
+      <div className="flex items-center justify-between px-4 pt-3 pb-2">
+        <span
+          className="text-2xl font-bold tabular-nums"
+          style={{ color: accent, opacity: 0.55 }}
+        >
+          {num}
+        </span>
+        <span className="text-xs tracking-widest uppercase text-muted-foreground">
+          {sc.difficulty} · {difficultyRu[sc.difficulty]}
+        </span>
+      </div>
+
+      {/* Image */}
+      <div className="h-40 overflow-hidden">
         <div
-          className="absolute inset-0 bg-cover bg-center transition-transform duration-500 group-hover:scale-105"
+          className="w-full h-full bg-cover bg-center transition-transform duration-500 group-hover:scale-[1.04]"
           style={{ backgroundImage: `url('${sc.image}')` }}
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
-
-        {/* Difficulty badge */}
-        <div className="absolute top-3 right-3">
-          <Badge variant={difficultyVariant[sc.difficulty]} className="backdrop-blur-sm shadow text-xs">
-            {sc.difficulty} · {difficultyRu[sc.difficulty]}
-          </Badge>
-        </div>
-
-        {/* Title overlay */}
-        <div className="absolute bottom-3 left-4">
-          <p className="text-2xl font-extrabold text-white leading-none">{sc.title}</p>
-          <p className="text-sm text-white/70 mt-0.5">{sc.titleSub}</p>
-        </div>
       </div>
 
       {/* Card body */}
-      <div className="p-4">
-        <p className="text-sm text-muted-foreground leading-relaxed mb-4">
+      <div className="px-4 pt-4 pb-4">
+        <p
+          className="text-xl font-bold text-foreground leading-none"
+          style={serifFont}
+        >
+          {sc.title}
+        </p>
+        <p className="text-sm text-muted-foreground mt-0.5">{sc.titleSub}</p>
+
+        <p className="text-sm text-muted-foreground leading-relaxed mt-3">
           {sc.description}
         </p>
 
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <MapPin className="w-3 h-3" />
-            <span>{sc.character.name}</span>
-            <span className="text-border">·</span>
-            <span>{sc.steps.length}단계</span>
-          </div>
+        <hr className="my-3 border-border" />
 
-          <div className="flex items-center gap-1 text-xs font-medium text-primary border border-primary/30 rounded-md px-2.5 py-1.5">
-            시작
-            <ChevronRight className="w-3.5 h-3.5" />
-          </div>
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-muted-foreground">
+            {sc.character.name} · {sc.steps.length}단계
+          </span>
+          <span
+            className="text-xs font-semibold transition-opacity duration-200 group-hover:opacity-100 opacity-70"
+            style={{ color: accent }}
+          >
+            연습 시작 →
+          </span>
         </div>
       </div>
     </button>

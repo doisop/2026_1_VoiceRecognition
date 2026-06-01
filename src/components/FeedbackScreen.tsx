@@ -20,9 +20,9 @@ export default function FeedbackScreen({ result, scenario, onRetry, onHome }: Pr
   } = result
 
   const scoreColor =
-    expressionScore >= 80 ? 'text-green-500' :
-    expressionScore >= 50 ? 'text-yellow-400' :
-    'text-red-400'
+    expressionScore >= 80 ? 'text-green-600' :
+    expressionScore >= 50 ? 'text-yellow-600' :
+    'text-red-600'
 
   const scoreLabel =
     expressionScore >= 80 ? '훌륭해요!' :
@@ -36,45 +36,45 @@ export default function FeedbackScreen({ result, scenario, onRetry, onHome }: Pr
 
       {/* Score header */}
       <div className="text-center">
-        <p className="text-sm text-gray-400 mb-1">{scenario.title} 완료</p>
+        <p className="text-sm text-muted-foreground mb-1">{scenario.title} 완료</p>
         <p className={`text-6xl font-bold ${scoreColor}`}>{expressionScore}</p>
-        <p className="text-lg font-semibold text-gray-300 mt-1">{scoreLabel}</p>
+        <p className="text-lg font-semibold text-foreground mt-1">{scoreLabel}</p>
       </div>
 
       {/* Transcript */}
-      <div className="bg-gray-800 rounded-2xl p-4">
-        <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-1">
+      <div className="bg-card border border-border rounded-2xl p-4">
+        <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide mb-1">
           내가 말한 내용
         </p>
-        <p className="text-white font-medium text-sm">
+        <p className="text-foreground font-medium text-sm">
           {transcript || '(인식된 내용 없음)'}
         </p>
       </div>
 
       {/* Expression feedback */}
-      <div className="bg-gray-800 rounded-2xl p-4">
-        <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-2">
+      <div className="bg-card border border-border rounded-2xl p-4">
+        <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide mb-2">
           표현 평가
         </p>
         {expressionFeedback.length > 0 ? (
           <ul className="space-y-1.5">
             {expressionFeedback.map((fb, i) => (
-              <li key={i} className="text-sm text-gray-300 flex gap-2">
-                <span className="text-yellow-400 flex-shrink-0">•</span>
+              <li key={i} className="text-sm text-foreground flex gap-2">
+                <span className="text-yellow-600 flex-shrink-0">•</span>
                 <span>{fb}</span>
               </li>
             ))}
           </ul>
         ) : (
-          <p className="text-sm text-green-400 font-medium">
+          <p className="text-sm text-green-600 font-medium">
             핵심 표현을 정확하게 사용했어요!
           </p>
         )}
       </div>
 
       {/* Pitch analysis */}
-      <div className="bg-gray-800 rounded-2xl p-4">
-        <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-3">
+      <div className="bg-card border border-border rounded-2xl p-4">
+        <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide mb-3">
           음조 분석 (Pitch Contour)
         </p>
 
@@ -85,15 +85,15 @@ export default function FeedbackScreen({ result, scenario, onRetry, onHome }: Pr
               contourRef={pitchContourRef?.length ? pitchContourRef : null}
               divergentRegions={pitchDivergentRegions}
             />
-            <p className="text-sm text-gray-300 mt-3">{pitchFeedback}</p>
+            <p className="text-sm text-foreground mt-3">{pitchFeedback}</p>
             {pitchDivergentRegions.length > 0 && (
-              <p className="text-xs text-red-400 mt-1">
+              <p className="text-xs text-red-600 mt-1">
                 붉은 구간: 기준 음성과 억양 차이가 큰 부분
               </p>
             )}
           </>
         ) : (
-          <p className="text-sm text-gray-500">{pitchFeedback}</p>
+          <p className="text-sm text-muted-foreground">{pitchFeedback}</p>
         )}
       </div>
 
@@ -101,13 +101,13 @@ export default function FeedbackScreen({ result, scenario, onRetry, onHome }: Pr
       <div className="flex gap-3 pt-2">
         <button
           onClick={onRetry}
-          className="flex-1 py-3 rounded-xl bg-indigo-600 text-white font-semibold hover:bg-indigo-500 transition-colors"
+          className="flex-1 py-3 rounded-xl bg-primary text-primary-foreground font-semibold hover:bg-primary/90 transition-colors"
         >
           다시 하기
         </button>
         <button
           onClick={onHome}
-          className="flex-1 py-3 rounded-xl bg-gray-700 text-gray-200 font-semibold hover:bg-gray-600 transition-colors"
+          className="flex-1 py-3 rounded-xl bg-secondary text-secondary-foreground font-semibold hover:bg-secondary/80 transition-colors"
         >
           홈으로
         </button>
