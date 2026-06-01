@@ -307,6 +307,24 @@ function buildErrorFallback(err: unknown): PronunciationPracticeResult {
   }
 }
 
+/** Modal voice_compare 서버 콜드 스타트 방지용 워밍업 — 앱 로드 시 백그라운드에서 호출 */
+export async function warmUpCompare(): Promise<void> {
+  const startedAt = performance.now()
+  console.log('[ModalCompare] 서버 워밍업 시작 (콜드 스타트 방지)...')
+  try {
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), 30_000)
+    const res = await fetch(`${MODAL_COMPARE_ENDPOINT}/health`, { signal: ctrl.signal })
+    clearTimeout(timer)
+    const ms = Math.round(performance.now() - startedAt)
+    if (res.ok) {
+      console.log(`[ModalCompare] 서버 워밍업 완료 (${ms}ms). 이후 요청은 빠르게 처리됩니다.`)
+    }
+  } catch {
+    console.log('[ModalCompare] 서버 워밍업 완료 (오류 무시 — 서버가 깨어남).')
+  }
+}
+
 /**
  * 사용자 녹음 + 시나리오 ref 오디오 + 발화 텍스트를 Modal에 보내고
  * UI가 바로 표시할 수 있는 PronunciationPracticeResult로 변환한다.

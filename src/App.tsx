@@ -5,6 +5,7 @@ import RoleplayScreen from './components/RoleplayScreen'
 import FeedbackScreen from './components/FeedbackScreen'
 import { loadWhisper, warmUpSTT } from './modules/stt'
 import { initVoices } from './modules/tts'
+import { warmUpCompare } from './modules/practice/modalCompare'
 
 type Screen = 'home' | 'roleplay' | 'feedback'
 
@@ -13,6 +14,7 @@ export default function App() {
 
   useEffect(() => {
     loadWhisper().then(() => warmUpSTT())
+    warmUpCompare()
     initVoices()
   }, [])
   const [scenario, setScenario] = useState<Scenario | null>(null)
