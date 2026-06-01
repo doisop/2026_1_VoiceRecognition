@@ -366,17 +366,7 @@ export default function RoleplayScreen({ scenario, onFeedback, onBack }: Props) 
               {dialogLine.speaker}
             </span>
 
-            {dialogLine.score !== undefined && (
-              <span className={`text-xs font-semibold px-2 py-0.5 rounded ${
-                dialogLine.score >= 80 ? 'bg-emerald-500/80 text-white' :
-                dialogLine.score >= 50 ? 'bg-amber-500/80 text-white' :
-                'bg-rose-500/80 text-white'
-              }`}>
-                {dialogLine.score}점
-              </span>
-            )}
-
-            <div className={`w-1.5 h-1.5 rounded-full ml-auto ${
+<div className={`w-1.5 h-1.5 rounded-full ml-auto ${
               stepState === 'recording'  ? 'bg-red-400 animate-pulse' :
               stepState === 'speaking'   ? 'bg-[#1B34B8]/70 animate-pulse' :
               stepState === 'processing' ? 'bg-amber-400 animate-pulse' :
