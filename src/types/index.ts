@@ -3,6 +3,7 @@ export type Screen = 'home' | 'roleplay' | 'feedback'
 export interface ScenarioStep {
   id: number
   aiText: string
+  aiTextRu?: string
   targetExpressions: string[]
   keywords: string[]
   referenceAudio: string

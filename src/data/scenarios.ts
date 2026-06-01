@@ -14,6 +14,7 @@ export const scenarios: Scenario[] = [
       {
         id: 0,
         aiText: '어서 오세요. 오늘 어디가 불편해서 오셨나요?',
+        aiTextRu: 'Добро пожаловать. Что вас беспокоит сегодня?',
         targetExpressions: ['머리가 아파요', '두통이 있어요', '머리가 너무 아파요'],
         keywords: ['머리', '아파', '두통'],
         referenceAudio: '/audio/hospital_0_ref.wav',
@@ -22,6 +23,7 @@ export const scenarios: Scenario[] = [
       {
         id: 1,
         aiText: '아, 목이 많이 부었네요. 혹시 기침도 나고 속이 더부룩하거나 하진 않으세요?',
+        aiTextRu: 'О, горло сильно опухло. Есть ли у вас кашель или тяжесть в желудке?',
         targetExpressions: ['어제부터요', '오늘 아침부터요', '이틀 전부터요'],
         keywords: ['어제', '아침', '전', '부터'],
         referenceAudio: '/audio/hospital_1_ref.wav',
@@ -30,6 +32,7 @@ export const scenarios: Scenario[] = [
       {
         id: 2,
         aiText: '전형적인 목감기네요. 아마 오래 가지는 않을것 같아요. 사흘치 약을 처방해 드릴게요.',
+        aiTextRu: 'Это типичная ангина. Думаю, ненадолго. Выпишу вам лекарство на три дня.',
         targetExpressions: ['열도 나요', '열이 있어요', '구역질도 나요', '없어요'],
         keywords: ['열', '구역질', '없어요', '있어요'],
         referenceAudio: '/audio/hospital_2_ref.wav',
@@ -38,6 +41,7 @@ export const scenarios: Scenario[] = [
       {
         id: 3,
         aiText: '약국은 나가서 오른쪽으로 가시면 되고요. 3일 뒤에도 증상이 있다면 다시 오세요.',
+        aiTextRu: 'Аптека находится справа от выхода. Если через 3 дня симптомы не пройдут, приходите снова.',
         targetExpressions: ['감사합니다', '네, 알겠습니다', '고맙습니다'],
         keywords: ['감사', '알겠', '고맙'],
         referenceAudio: '/audio/hospital_3_ref.wav',
@@ -58,6 +62,7 @@ export const scenarios: Scenario[] = [
       {
         id: 0,
         aiText: '안녕하세요, 고객님. 오늘 어떤 업무 도와드릴까요?',
+        aiTextRu: 'Здравствуйте. Чем могу помочь сегодня?',
         targetExpressions: ['계좌를 만들고 싶어요', '통장을 만들고 싶어요', '계좌 개설하고 싶어요'],
         keywords: ['계좌', '통장', '만들', '개설'],
         referenceAudio: '/audio/bank_0_ref.wav',
@@ -66,6 +71,7 @@ export const scenarios: Scenario[] = [
       {
         id: 1,
         aiText: '감사합니다. 혹시 원하시는 카드 종류가 있으신가요?',
+        aiTextRu: 'Спасибо. Есть ли у вас предпочтения по виду карты?',
         targetExpressions: ['네, 여기 있어요', '외국인등록증 있어요', '여권 가져왔어요'],
         keywords: ['네', '여기', '외국인', '여권', '있어요'],
         referenceAudio: '/audio/bank_1_ref.wav',
@@ -74,6 +80,7 @@ export const scenarios: Scenario[] = [
       {
         id: 2,
         aiText: '그럼 혜택이 많은 걸로 만들어 드릴게요. 비밀번호 네 자리 설정해 주세요.',
+        aiTextRu: 'Тогда оформим карту с наибольшими льготами. Задайте четырёхзначный PIN-код.',
         targetExpressions: ['아니요, 괜찮아요', '감사합니다', '네, 됐어요'],
         keywords: ['아니요', '괜찮', '감사', '됐어요'],
         referenceAudio: '/audio/bank_2_ref.wav',
@@ -94,6 +101,7 @@ export const scenarios: Scenario[] = [
       {
         id: 0,
         aiText: '안녕하세요. 어떤 업무로 오셨나요?',
+        aiTextRu: 'Здравствуйте. По какому вопросу вы пришли?',
         targetExpressions: ['주민등록등본 발급해 주세요', '등본 한 통 주세요', '주민등록 떼고 싶어요'],
         keywords: ['주민등록', '등본', '발급', '주세요'],
         referenceAudio: '/audio/gov_0_ref.wav',
@@ -102,6 +110,7 @@ export const scenarios: Scenario[] = [
       {
         id: 1,
         aiText: '서류 다 잘 챙겨 오셨네요. 접수 도와드릴게요.',
+        aiTextRu: 'Вы принесли все документы. Помогу с оформлением.',
         targetExpressions: ['네, 여기 있어요', '외국인등록증이요', '여권입니다'],
         keywords: ['네', '여기', '외국인등록증', '여권'],
         referenceAudio: '/audio/gov_1_ref.wav',
@@ -110,6 +119,7 @@ export const scenarios: Scenario[] = [
       {
         id: 2,
         aiText: '다 잘 챙겨 오셨어요. 바로 드리겠습니다.',
+        aiTextRu: 'Всё в порядке. Сейчас выдам вам.',
         targetExpressions: ['감사합니다', '수고하세요', '고맙습니다'],
         keywords: ['감사', '수고', '고맙'],
         referenceAudio: '/audio/gov_2_ref.wav',

@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import type { PronunciationPracticeResult } from '../types'
 import { AudioRecorder } from '../modules/audio'
 import { analyzePronunciationPractice } from '../modules/pronunciationAnalysis'
+import { practiceUtterancesRu } from '../data/practiceUtterances'
 import { Mic, MicOff, Volume2, Square } from 'lucide-react'
 
 
@@ -195,14 +196,32 @@ export default function PracticeModal({ modelText, scenarioId, stepId, onClose }
         ) : (
           <>
             {/* ── 발음 연습 화면 (prompt / recording / processing) ── */}
-            <div className="flex-1 flex flex-col items-center justify-center px-6 py-8 gap-6">
-              <p className="text-white/50 text-xs">따라 말해보세요</p>
+            <div className="flex-1 flex flex-col items-center justify-center px-6 py-8 gap-5">
+              {/* 언어 토글 */}
+              <div className="flex bg-white/10 rounded-lg p-0.5 gap-0.5">
+                {(['ko', 'ru'] as const).map((l) => (
+                  <button
+                    key={l}
+                    onClick={() => { stopAll(); setLang(l) }}
+                    className={`px-4 py-1.5 rounded-md text-xs font-semibold transition-colors ${
+                      lang === l ? 'bg-white text-gray-900' : 'text-white/60 hover:text-white'
+                    }`}
+                  >
+                    {l === 'ko' ? '한국어' : 'Русский'}
+                  </button>
+                ))}
+              </div>
 
               {/* 예시 문장 */}
               <div className={`w-full bg-white/8 rounded-2xl px-6 py-5 text-center transition-opacity ${
                 modalState === 'processing' ? 'opacity-30' : 'opacity-100'
               }`}>
-                <p className="text-white text-2xl font-bold tracking-wide leading-relaxed">
+                {lang === 'ru' && (
+                  <p className="text-white/60 text-base leading-relaxed mb-3">
+                    {practiceUtterancesRu[`${scenarioId}_${stepId}`] ?? ''}
+                  </p>
+                )}
+                <p className="text-white text-3xl font-bold tracking-wide leading-relaxed">
                   {modelText}
                 </p>
               </div>

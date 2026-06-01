@@ -31,6 +31,7 @@ type StepState = 'speaking' | 'idle' | 'recording' | 'processing'
 interface DialogLine {
   speaker: string
   text: string
+  textRu?: string
   score?: number
   pronunciationFeedback?: string
 }
@@ -67,8 +68,8 @@ export default function RoleplayScreen({ scenario, onFeedback, onBack }: Props) 
   }, [])
 
   function speakStep(idx: number) {
-    const aiText = scenario.steps[idx].aiText
-    setDialogLine({ speaker: scenario.character.name, text: aiText })
+    const { aiText, aiTextRu } = scenario.steps[idx]
+    setDialogLine({ speaker: scenario.character.name, text: aiText, textRu: aiTextRu })
     setAvatarState('talking')
     setStepState('speaking')
     speak(aiText, {
@@ -294,37 +295,7 @@ export default function RoleplayScreen({ scenario, onFeedback, onBack }: Props) 
     }
   }
 
-  function handleChipClick(phrase: string) {
-    if (stepState !== 'idle') return
-    stopSpeaking()
-    const evalResult = evaluateExpression(phrase, step)
-    scoresRef.current.push(evalResult.score)
-    feedbackRef.current.push(...evalResult.feedback)
-    setDialogLine({ speaker: '나', text: phrase, score: evalResult.score })
-
-    if (step.isLast) {
-      const avgScore = Math.round(
-        scoresRef.current.reduce((a, b) => a + b, 0) / scoresRef.current.length
-      )
-      setTimeout(() => onFeedback({
-        transcript: phrase,
-        expressionScore: avgScore,
-        expressionFeedback: feedbackRef.current,
-        pitchContourUser: [],
-        pitchContourRef: [],
-        pitchFeedback: '힌트 선택 — 음조 분석 없음',
-        pitchDivergentRegions: [],
-      }), 900)
-    } else {
-      setTimeout(() => {
-        const next = stepIndex + 1
-        setStepIndex(next)
-        speakStep(next)
-      }, 900)
-    }
-  }
-
-  const isUserTurn = stepState === 'idle'
+const isUserTurn = stepState === 'idle'
 
   return (
     <div
@@ -369,12 +340,12 @@ export default function RoleplayScreen({ scenario, onFeedback, onBack }: Props) 
       )}
 
       {/* ── VN Dialog box ── */}
-      <div className="absolute bottom-0 left-0 right-0 z-20" style={{ height: '28%' }}>
+      <div className="absolute bottom-0 left-0 right-0 z-20" style={{ height: '32%' }}>
         <div className="h-full bg-black/65 backdrop-blur-md border-t border-white/15 flex flex-col px-6 py-4 gap-2">
 
           {/* Speaker name + state dot */}
           <div className="flex items-center gap-3">
-            <span className={`text-sm font-bold px-3 py-0.5 rounded ${
+            <span className={`text-base font-bold px-3 py-0.5 rounded ${
               dialogLine.speaker === '나'
                 ? 'bg-[#1B34B8]/80 text-white'
                 : 'bg-white/15 text-white'
@@ -382,7 +353,7 @@ export default function RoleplayScreen({ scenario, onFeedback, onBack }: Props) 
               {dialogLine.speaker}
             </span>
 
-<div className={`w-1.5 h-1.5 rounded-full ml-auto ${
+            <div className={`w-1.5 h-1.5 rounded-full ml-auto ${
               stepState === 'recording'  ? 'bg-red-400 animate-pulse' :
               stepState === 'speaking'   ? 'bg-[#1B34B8]/70 animate-pulse' :
               stepState === 'processing' ? 'bg-amber-400 animate-pulse' :
@@ -391,9 +362,16 @@ export default function RoleplayScreen({ scenario, onFeedback, onBack }: Props) 
           </div>
 
           {/* Dialog text */}
-          <p className="text-white text-lg leading-relaxed flex-1 whitespace-pre-wrap">
-            {dialogLine.text}
-          </p>
+          <div className="flex-1 flex flex-col justify-start">
+            <p className="text-white text-2xl leading-relaxed whitespace-pre-wrap">
+              {dialogLine.text}
+            </p>
+            {dialogLine.textRu && (
+              <p className="text-white/50 text-2xl leading-relaxed whitespace-pre-wrap mt-2">
+                {dialogLine.textRu}
+              </p>
+            )}
+          </div>
 
           {/* 발음 피드백 */}
           {dialogLine.pronunciationFeedback && (
@@ -404,21 +382,10 @@ export default function RoleplayScreen({ scenario, onFeedback, onBack }: Props) 
 
           {/* Controls (idle) */}
           {isUserTurn && (
-            <div className="flex items-center gap-2">
-              <div className="flex gap-1.5 flex-1 flex-wrap">
-                {step.targetExpressions.slice(0, 2).map((expr) => (
-                  <button
-                    key={expr}
-                    onClick={() => handleChipClick(expr)}
-                    className="text-xs text-white/70 border border-white/25 rounded-full px-2.5 py-1 hover:bg-white/15 hover:text-white transition-colors"
-                  >
-                    {expr}
-                  </button>
-                ))}
-              </div>
+            <div className="flex justify-end">
               <button
                 onClick={startRecording}
-                className="w-11 h-11 rounded-full bg-[#1B34B8] hover:bg-[#1B34B8]/90 text-white flex items-center justify-center shadow-lg transition-colors flex-shrink-0"
+                className="w-11 h-11 rounded-full bg-[#1B34B8] hover:bg-[#1B34B8]/90 text-white flex items-center justify-center shadow-lg transition-colors"
               >
                 <Mic className="w-5 h-5" />
               </button>
