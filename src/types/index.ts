@@ -41,6 +41,7 @@ export interface Scenario {
   character: {
     name: string
     role: string
+    gender: 'female' | 'female-officer' | 'male'
   }
   steps: ScenarioStep[]
 }

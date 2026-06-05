@@ -5,7 +5,14 @@
       "Bash(npx --yes create-vite@5 . --template react-ts)",
       "Bash(npm install:*)",
       "Bash(npx tsc:*)",
-      "WebFetch(domain:docs.cloud.google.com)"
+      "WebFetch(domain:docs.cloud.google.com)",
+      "WebFetch(domain:variant.com)",
+      "Bash(New-Item -ItemType Directory -Force \"C:\\\\Projects\\\\2026_VoiceRecognition\\\\poster\\\\images\")",
+      "Bash(Out-Null)",
+      "Bash(Copy-Item \"c:\\\\Users\\\\samsung\\\\OneDrive\\\\바탕 화면\\\\홈스크린.PNG\" \"C:\\\\Projects\\\\2026_VoiceRecognition\\\\poster\\\\images\\\\home.png\")",
+      "Bash(Copy-Item \"c:\\\\Users\\\\samsung\\\\OneDrive\\\\바탕 화면\\\\롤플레잉화면1.PNG\" \"C:\\\\Projects\\\\2026_VoiceRecognition\\\\poster\\\\images\\\\roleplay1.png\")",
+      "Bash(Copy-Item \"c:\\\\Users\\\\samsung\\\\OneDrive\\\\바탕 화면\\\\롤플레잉화면2.PNG\" \"C:\\\\Projects\\\\2026_VoiceRecognition\\\\poster\\\\images\\\\roleplay2.png\")",
+      "Bash(Write-Output \"완료\")"
     ]
   }
 }

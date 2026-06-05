@@ -326,7 +326,7 @@ const isUserTurn = stepState === 'idle'
       {/* ── Avatar ── */}
       <div className="absolute left-1/2 -translate-x-1/2 bottom-[26%] z-10"
            style={{ height: '72%', aspectRatio: '3/4' }}>
-        <AvatarCharacter state={avatarState} className="w-full h-full" />
+        <AvatarCharacter state={avatarState} gender={scenario.character.gender} className="w-full h-full" />
       </div>
 
       {/* ── Step 2 발음 연습 모달 ── */}

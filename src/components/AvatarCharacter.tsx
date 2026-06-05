@@ -13,6 +13,7 @@ export type AvatarState = 'idle' | 'listening' | 'thinking' | 'talking'
 
 interface Props {
   state: AvatarState
+  gender?: 'female' | 'female-officer' | 'male'
   className?: string
 }
 
@@ -42,7 +43,7 @@ const PUPIL_OFFSET: Record<AvatarState, { dx: number; dy: number }> = {
   talking:   { dx: 0, dy: 0 },
 }
 
-export default function AvatarCharacter({ state, className = '' }: Props) {
+export default function AvatarCharacter({ state, gender = 'female', className = '' }: Props) {
   const [mouthPath, setMouthPath] = useState(MOUTH.smile)
   const [blinkScale, setBlinkScale] = useState(1)
   const talkIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -123,8 +124,22 @@ export default function AvatarCharacter({ state, className = '' }: Props) {
           </radialGradient>
           {/* Shirt gradient */}
           <linearGradient id="shirtGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stopColor="#6366f1" />
-            <stop offset="100%" stopColor="#4338ca" />
+            {gender === 'male' ? (
+              <>
+                <stop offset="0%" stopColor="#1a2a4a" />
+                <stop offset="100%" stopColor="#0f1a30" />
+              </>
+            ) : gender === 'female-officer' ? (
+              <>
+                <stop offset="0%" stopColor="#4a5a72" />
+                <stop offset="100%" stopColor="#333f52" />
+              </>
+            ) : (
+              <>
+                <stop offset="0%" stopColor="#6366f1" />
+                <stop offset="100%" stopColor="#4338ca" />
+              </>
+            )}
           </linearGradient>
           <clipPath id="leftEyeClip">
             <ellipse cx="158" cy="216" rx="23" ry="24" />
@@ -142,11 +157,31 @@ export default function AvatarCharacter({ state, className = '' }: Props) {
           d="M 80 480 L 80 400 Q 100 370 140 360 L 160 380 L 200 395 L 240 380 L 260 360 Q 300 370 320 400 L 320 480 Z"
           fill="url(#shirtGrad)"
         />
-        {/* Collar V */}
-        <path
-          d="M 160 380 L 200 405 L 240 380 L 235 375 L 200 398 L 165 375 Z"
-          fill="#4338ca"
-        />
+        {gender === 'male' ? (
+          <>
+            {/* Suit lapels */}
+            <path d="M 160 365 L 200 400 L 165 370 Z" fill="#253555" />
+            <path d="M 240 365 L 200 400 L 235 370 Z" fill="#253555" />
+            {/* White shirt center */}
+            <path d="M 185 375 L 200 400 L 215 375 L 210 370 L 200 393 L 190 370 Z" fill="#f0f4ff" />
+            {/* Tie */}
+            <path d="M 197 383 L 200 420 L 203 383 L 200 378 Z" fill="#C84B31" />
+          </>
+        ) : gender === 'female-officer' ? (
+          <>
+            {/* Officer jacket lapels */}
+            <path d="M 160 365 L 200 398 L 165 372 Z" fill="#3a4a60" />
+            <path d="M 240 365 L 200 398 L 235 372 Z" fill="#3a4a60" />
+            {/* White collar */}
+            <path d="M 185 372 L 200 395 L 215 372 L 210 368 L 200 388 L 190 368 Z" fill="#f0f4ff" />
+          </>
+        ) : (
+          /* Nurse collar V */
+          <path
+            d="M 160 380 L 200 405 L 240 380 L 235 375 L 200 398 L 165 375 Z"
+            fill="#4338ca"
+          />
+        )}
         {/* Neck */}
         <rect x="178" y="355" width="44" height="40" rx="10" fill="url(#faceGrad)" />
 
@@ -159,26 +194,69 @@ export default function AvatarCharacter({ state, className = '' }: Props) {
         {/* ── Face ── */}
         <ellipse cx="200" cy="238" rx="118" ry="138" fill="url(#faceGrad)" />
 
-        {/* ── Hair (back layer) ── */}
-        <path
-          d="M 88 210 Q 82 130 130 95 Q 165 72 200 68 Q 235 72 270 95 Q 318 130 312 210 Q 295 130 260 108 Q 235 96 200 94 Q 165 96 140 108 Q 105 130 88 210 Z"
-          fill="#1c1c2e"
-        />
-        {/* Hair sides */}
-        <path
-          d="M 88 210 Q 80 260 85 310 Q 88 280 95 250 Q 100 220 88 210 Z"
-          fill="#1c1c2e"
-        />
-        <path
-          d="M 312 210 Q 320 260 315 310 Q 312 280 305 250 Q 300 220 312 210 Z"
-          fill="#1c1c2e"
-        />
-        {/* Hair top detail */}
-        <path
-          d="M 140 108 Q 165 88 200 84 Q 235 88 260 108 Q 240 95 200 93 Q 160 95 140 108 Z"
-          fill="#2d2d4a"
-          opacity="0.6"
-        />
+        {/* ── Hair ── */}
+        {gender === 'female-officer' ? (
+          <>
+            {/* Same style as female, chestnut brown color */}
+            <path
+              d="M 88 210 Q 82 130 130 95 Q 165 72 200 68 Q 235 72 270 95 Q 318 130 312 210 Q 295 130 260 108 Q 235 96 200 94 Q 165 96 140 108 Q 105 130 88 210 Z"
+              fill="#5c3a1e"
+            />
+            <path
+              d="M 88 210 Q 80 260 85 310 Q 88 280 95 250 Q 100 220 88 210 Z"
+              fill="#5c3a1e"
+            />
+            <path
+              d="M 312 210 Q 320 260 315 310 Q 312 280 305 250 Q 300 220 312 210 Z"
+              fill="#5c3a1e"
+            />
+            <path
+              d="M 140 108 Q 165 88 200 84 Q 235 88 260 108 Q 240 95 200 93 Q 160 95 140 108 Z"
+              fill="#7a5230"
+              opacity="0.6"
+            />
+          </>
+        ) : gender === 'male' ? (
+          <>
+            {/* Short male hair - close cropped */}
+            <path
+              d="M 92 218 Q 86 145 132 102 Q 166 78 200 75 Q 234 78 268 102 Q 314 145 308 218 Q 296 148 262 114 Q 236 98 200 96 Q 164 98 138 114 Q 104 148 92 218 Z"
+              fill="#1c1c2e"
+            />
+            {/* Short side taper - no long strands */}
+            <path d="M 92 218 Q 86 240 90 258 Q 94 242 98 228 Z" fill="#1c1c2e" />
+            <path d="M 308 218 Q 314 240 310 258 Q 306 242 302 228 Z" fill="#1c1c2e" />
+            {/* Hair top highlight */}
+            <path
+              d="M 138 114 Q 164 94 200 92 Q 236 94 262 114 Q 242 100 200 98 Q 158 100 138 114 Z"
+              fill="#2d2d4a"
+              opacity="0.6"
+            />
+          </>
+        ) : (
+          <>
+            {/* Female hair (back layer) */}
+            <path
+              d="M 88 210 Q 82 130 130 95 Q 165 72 200 68 Q 235 72 270 95 Q 318 130 312 210 Q 295 130 260 108 Q 235 96 200 94 Q 165 96 140 108 Q 105 130 88 210 Z"
+              fill="#1c1c2e"
+            />
+            {/* Hair sides */}
+            <path
+              d="M 88 210 Q 80 260 85 310 Q 88 280 95 250 Q 100 220 88 210 Z"
+              fill="#1c1c2e"
+            />
+            <path
+              d="M 312 210 Q 320 260 315 310 Q 312 280 305 250 Q 300 220 312 210 Z"
+              fill="#1c1c2e"
+            />
+            {/* Hair top detail */}
+            <path
+              d="M 140 108 Q 165 88 200 84 Q 235 88 260 108 Q 240 95 200 93 Q 160 95 140 108 Z"
+              fill="#2d2d4a"
+              opacity="0.6"
+            />
+          </>
+        )}
 
         {/* ── Eyebrows ── */}
         <path
@@ -228,8 +306,12 @@ export default function AvatarCharacter({ state, className = '' }: Props) {
         <path d="M 196 252 Q 200 258 204 252" stroke="#e8a882" strokeWidth="2.5" strokeLinecap="round" fill="none" />
 
         {/* ── Cheeks ── */}
-        <ellipse cx="140" cy="260" rx="28" ry="16" fill="url(#cheekGrad)" />
-        <ellipse cx="260" cy="260" rx="28" ry="16" fill="url(#cheekGrad)" />
+        {gender === 'female' && (
+          <>
+            <ellipse cx="140" cy="260" rx="28" ry="16" fill="url(#cheekGrad)" />
+            <ellipse cx="260" cy="260" rx="28" ry="16" fill="url(#cheekGrad)" />
+          </>
+        )}
 
         {/* ── Mouth ── */}
         {state === 'talking' ? (

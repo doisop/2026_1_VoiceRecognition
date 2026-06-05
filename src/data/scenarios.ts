@@ -9,7 +9,7 @@ export const scenarios: Scenario[] = [
     difficulty: '초급',
     image: '/images/hospital.png',
     voice: 'ko-KR-Neural2-A',
-    character: { name: '이주연 간호사', role: '병원 접수 담당' },
+    character: { name: '김주연 간호사', role: '병원 접수 담당', gender: 'female' },
     steps: [
       {
         id: 0,
@@ -57,7 +57,7 @@ export const scenarios: Scenario[] = [
     difficulty: '초급',
     image: '/images/bank.png',
     voice: 'ko-KR-Neural2-C',
-    character: { name: '박준호 은행원', role: '은행 창구 직원' },
+    character: { name: '박준호 은행원', role: '은행 창구 직원', gender: 'male' },
     steps: [
       {
         id: 0,
@@ -96,7 +96,7 @@ export const scenarios: Scenario[] = [
     difficulty: '중급',
     image: '/images/government.png',
     voice: 'ko-KR-Neural2-B',
-    character: { name: '이수진 공무원', role: '주민센터 민원 담당' },
+    character: { name: '이수진 공무원', role: '주민센터 민원 담당', gender: 'female-officer' },
     steps: [
       {
         id: 0,
