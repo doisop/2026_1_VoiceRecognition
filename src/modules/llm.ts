@@ -54,7 +54,16 @@ AI 발화: "${context.aiText}"
 `.trim()
 
   const url = `${GEMINI_BASE_URL}/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`
-  const body = { contents: [{ parts: [{ text: prompt }] }] }
+  const body = {
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: {
+      thinkingConfig: {
+        thinkingBudget: 0,
+      },
+      maxOutputTokens: 128,
+      temperature: 0.2,
+    },
+  }
 
   console.log('[LLM] 발화 분석 요청 →', { transcript, scenarioTitle: context.scenarioTitle })
 
